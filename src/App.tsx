@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent, FC } from "react";
 import { Search, AtSign, Heart, MessageCircle, TrendingUp, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { analyzeProfile, ProfileData } from "./api";
 
 // --- Components ---
 
@@ -71,7 +72,7 @@ const LoadingScreen: FC = () => (
   </motion.div>
 );
 
-const ResultScreen: FC = () => {
+const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -85,7 +86,7 @@ const ResultScreen: FC = () => {
             <div className="w-[92%] h-[92%] rounded-full bg-off-white flex items-center justify-center">
               <div className="w-[88%] h-[88%] rounded-full overflow-hidden border-[4px] border-bg">
                 <img 
-                  src="https://picsum.photos/seed/broz/500/500" 
+                  src={data.avatar} 
                   alt="Profile" 
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
@@ -116,16 +117,16 @@ const ResultScreen: FC = () => {
             <div className="flex items-center gap-6">
               <Heart size={36} className="text-bg" fill="currentColor" />
               <div className="flex items-baseline gap-1.5">
-                <span className="text-5xl font-condensed text-bg leading-none">30</span>
-                <span className="text-xl font-condensed text-bg/60 uppercase">avg</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.likes.split(' ')[0]}</span>
+                {data.likes.includes(' ') && <span className="text-xl font-condensed text-bg/60 uppercase">{data.likes.split(' ').slice(1).join(' ')}</span>}
               </div>
               <TrendingUp size={28} className="text-bg/30 ml-auto" />
             </div>
             <div className="flex items-center gap-6">
               <MessageCircle size={36} className="text-bg" fill="currentColor" />
               <div className="flex items-baseline gap-1.5">
-                <span className="text-5xl font-condensed text-bg leading-none">30</span>
-                <span className="text-xl font-condensed text-bg/60 uppercase">avg</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.comments.split(' ')[0]}</span>
+                {data.comments.includes(' ') && <span className="text-xl font-condensed text-bg/60 uppercase">{data.comments.split(' ').slice(1).join(' ')}</span>}
               </div>
               <TrendingUp size={28} className="text-bg/30 ml-auto" />
             </div>
@@ -134,7 +135,7 @@ const ResultScreen: FC = () => {
                  <TrendingUp size={22} className="text-bg" strokeWidth={3} />
               </div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-5xl font-condensed text-bg leading-none">12.3%</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagementRate}</span>
               </div>
               <TrendingUp size={28} className="text-bg/30 ml-auto" />
             </div>
@@ -145,7 +146,7 @@ const ResultScreen: FC = () => {
         <div className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full"></div>
           <div className="absolute inset-0 pl-36 pr-14 py-10 flex items-center justify-center gap-1">
-            <span className="text-[180px] font-condensed font-bold text-bg leading-none tracking-tighter">66</span>
+            <span className="text-[180px] font-condensed font-bold text-bg leading-none tracking-tighter">{data.score}</span>
             <span className="text-4xl font-condensed font-bold text-bg mt-20">/100</span>
           </div>
         </div>
@@ -154,12 +155,7 @@ const ResultScreen: FC = () => {
         <div className="absolute bottom-0 left-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-x-[-1] scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-14 pr-36 py-10 flex flex-col justify-center gap-4">
-            {[
-              { width: "85%", label: "Creator" },
-              { width: "40%", label: "Storyteller" },
-              { width: "65%", label: "Promoter" },
-              { width: "75%", label: "Reply Guy" }
-            ].map((bar, i) => (
+            {data.archetypes.map((bar, i) => (
               <div key={i} className="group relative cursor-pointer">
                 <div className="w-full h-8 bg-off-white rounded-full overflow-hidden">
                   <motion.div 
@@ -181,12 +177,7 @@ const ResultScreen: FC = () => {
         <div className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-36 pr-14 py-10 flex flex-col justify-center gap-1">
-            {[
-              "#Opinion Leader",
-              "#Educational Explainer",
-              "#Project Promotion",
-              "#Personal Reflection"
-            ].map((niche, i) => (
+            {data.niches.map((niche, i) => (
               <div key={i} className="text-[32px] font-condensed font-bold text-bg leading-tight tracking-tight hover:translate-x-2 transition-transform cursor-default">
                 {niche}
               </div>
@@ -202,20 +193,24 @@ const ResultScreen: FC = () => {
 
 export default function App() {
   const [screen, setScreen] = useState<"search" | "loading" | "result">("search");
+  const [data, setData] = useState<ProfileData | null>(null);
 
-  const handleSearch = (username: string) => {
+  const handleSearch = async (username: string) => {
     console.log("Searching for:", username);
     setScreen("loading");
-  };
-
-  useEffect(() => {
-    if (screen === "loading") {
-      const timer = setTimeout(() => {
-        setScreen("result");
-      }, 2500);
-      return () => clearTimeout(timer);
+    try {
+      // Run the API call alongside a minimum 2.5s delay to show the loading animation
+      const [aiData] = await Promise.all([
+        analyzeProfile(username),
+        new Promise(resolve => setTimeout(resolve, 2500))
+      ]);
+      setData(aiData);
+      setScreen("result");
+    } catch (e) {
+      console.error(e);
+      setScreen("search");
     }
-  }, [screen]);
+  };
 
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20">
@@ -229,8 +224,8 @@ export default function App() {
           {screen === "loading" && (
             <LoadingScreen key="loading" />
           )}
-          {screen === "result" && (
-            <ResultScreen key="result" />
+          {screen === "result" && data && (
+            <ResultScreen key="result" data={data} />
           )}
         </AnimatePresence>
       </div>
