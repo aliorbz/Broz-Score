@@ -33,8 +33,8 @@ interface AnalysisData {
     scrapeFailureReason: string | null;
     error?: string | null;
     groqError?: string | null;
-    scraperServiceUsed?: boolean;
-    scraperServiceSuccess?: boolean;
+    rapidApiUsed?: boolean;
+    rapidApiSuccess?: boolean;
   };
 }
 
@@ -254,9 +254,9 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
       {/* Debug Info */}
       <div className="absolute bottom-4 right-4 text-[10px] font-mono text-off-white/20 pointer-events-none select-none text-right">
         <div>Source: {data.debug?.dataSource} | Tweets: {data.debug?.scrapedTweetCount}</div>
-        {data.debug?.scraperServiceUsed && (
-          <div className={data.debug.scraperServiceSuccess ? "text-green-400/40" : "text-yellow-400/40"}>
-            Service: {data.debug.scraperServiceSuccess ? "Success" : "Failed"}
+        {data.debug?.rapidApiUsed && (
+          <div className={data.debug.rapidApiSuccess ? "text-green-400/40" : "text-yellow-400/40"}>
+            RapidAPI: {data.debug.rapidApiSuccess ? "Success" : "Failed"}
           </div>
         )}
         {(data.debug?.scrapeFailureReason || data.debug?.error) && (

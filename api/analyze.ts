@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
+import { fetchTweetsFromRapidAPI } from "../src/lib/twitterApi.js";
 
 dotenv.config();
 
@@ -12,57 +13,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const username = (req.query.username as string) || "exampleuser";
   
   try {
-    let scrapedData = null;
-    let scraperServiceUsed = false;
-    let scraperServiceSuccess = false;
-    let scraperError: string | null = null;
+    let tweetsToAnalyze = null;
+    let rapidApiUsed = false;
+    let rapidApiSuccess = false;
+    let rapidApiError: string | null = null;
 
-    const scraperApiUrl = process.env.SCRAPER_API_URL;
-    if (scraperApiUrl) {
-      scraperServiceUsed = true;
+    if (process.env.RAPIDAPI_KEY) {
+      rapidApiUsed = true;
       try {
-        console.log(`[Scraper Service] Calling ${scraperApiUrl}/scrape?username=${username}`);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
-        const response = await fetch(`${scraperApiUrl}/scrape?username=${username}`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          scrapedData = await response.json();
-          scraperServiceSuccess = true;
-          console.log(`[Scraper Service] Success for ${username}`);
+        const tweets = await fetchTweetsFromRapidAPI(username);
+        if (tweets && tweets.length > 0) {
+          tweetsToAnalyze = tweets;
+          rapidApiSuccess = true;
         } else {
-          scraperError = `Service returned status ${response.status}`;
-          console.error(`[Scraper Service] Error: ${scraperError}`);
+          rapidApiError = "No tweets returned from RapidAPI";
         }
       } catch (err) {
-        scraperError = err instanceof Error ? err.message : String(err);
-        console.error(`[Scraper Service] Exception: ${scraperError}`);
+        rapidApiError = err instanceof Error ? err.message : String(err);
       }
     }
 
-    let tweetsToAnalyze;
     let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
     let dataSource: "real" | "mock" = "mock";
     let scrapedTweetCount = 0;
     let followersSource: "scraped" | "fallback" = "fallback";
     let avatarSource: "scraped" | "fallback" = "fallback";
 
-    if (scrapedData && scrapedData.tweets && scrapedData.tweets.length > 0) {
-      tweetsToAnalyze = scrapedData.tweets;
-      scrapedTweetCount = scrapedData.tweets.length;
+    if (tweetsToAnalyze && tweetsToAnalyze.length > 0) {
+      scrapedTweetCount = tweetsToAnalyze.length;
       dataSource = "real";
-      
-      if (scrapedData.avatarUrl) {
-        finalAvatarUrl = scrapedData.avatarUrl;
-        avatarSource = "scraped";
-      }
-      if (scrapedData.followers !== undefined) {
-        followersSource = "scraped";
-      }
     } else {
       // Fallback to mock data generation
       const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
@@ -163,16 +142,16 @@ Return ONLY the labels separated by commas, no other text.`
         scrapedTweetCount,
         followersSource,
         avatarSource,
-        profileLoaded: scrapedData?.debug?.profileLoaded || false,
-        avatarFound: scrapedData?.debug?.avatarFound || false,
-        followersFound: scrapedData?.debug?.followersFound || false,
-        timelineFound: scrapedData?.debug?.timelineFound || false,
-        loginWallDetected: scrapedData?.debug?.loginWallDetected || false,
-        scrapeFailureReason: scrapedData?.debug?.scrapeFailureReason || scraperError || "Scraping disabled for Vercel deployment verification",
-        error: scraperError,
+        profileLoaded: rapidApiSuccess,
+        avatarFound: false,
+        followersFound: false,
+        timelineFound: rapidApiSuccess,
+        loginWallDetected: false,
+        scrapeFailureReason: rapidApiError || (dataSource === "mock" ? "RapidAPI failed or returned no data" : null),
+        error: rapidApiError,
         groqError,
-        scraperServiceUsed,
-        scraperServiceSuccess
+        rapidApiUsed,
+        rapidApiSuccess
       }
     };
 
