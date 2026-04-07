@@ -24,87 +24,25 @@ async function startServer() {
     const username = (req.query.username as string) || "exampleuser";
     
     try {
-      // Try to scrape real data
-      let scrapedData = null;
-      let scrapeException: string | null = null;
+      // For now, return mock/calculated JSON only as requested
+      const dataSource: "real" | "mock" = "mock";
+      const scrapedTweetCount = 0;
+      const followersSource: "scraped" | "fallback" = "fallback";
+      const avatarSource: "scraped" | "fallback" = "fallback";
       
-      try {
-        scrapedData = await scrapeXProfile(username);
-      } catch (error) {
-        console.error("[Scraper Exception]", error);
-        scrapeException = error instanceof Error ? error.message : String(error);
-      }
-      
-      let tweetsToAnalyze;
-      let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
-      
-      // Debugging metadata
-      let dataSource: "real" | "mock" = "mock";
-      let scrapedTweetCount = 0;
-      let followersSource: "scraped" | "fallback" = "fallback";
-      let avatarSource: "scraped" | "fallback" = "fallback";
-      
-      // Detailed scraper debug
-      let profileLoaded = false;
-      let avatarFound = false;
-      let followersFound = false;
-      let timelineFound = false;
-      let loginWallDetected = false;
-      let scrapeFailureReason: string | null = scrapeException;
-
-      if (scrapedData) {
-        if (scrapedData.avatarUrl) {
-          finalAvatarUrl = scrapedData.avatarUrl;
-          avatarSource = "scraped";
-        }
-        if (scrapedData.followers !== undefined) {
-          followersSource = "scraped";
-        }
-        if (scrapedData.tweets && scrapedData.tweets.length > 0) {
-          tweetsToAnalyze = scrapedData.tweets;
-          scrapedTweetCount = scrapedData.tweets.length;
-          dataSource = "real";
-        }
-
-        // Map detailed debug from scraper
-        if (scrapedData.debug) {
-          profileLoaded = scrapedData.debug.profileLoaded;
-          avatarFound = scrapedData.debug.avatarFound;
-          followersFound = scrapedData.debug.followersFound;
-          timelineFound = scrapedData.debug.timelineFound;
-          loginWallDetected = scrapedData.debug.loginWallDetected;
-          scrapeFailureReason = scrapedData.debug.scrapeFailureReason || scrapeException;
-        }
-      }
-
-      if (!tweetsToAnalyze) {
-        // Fallback to mock data generation
-        const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
-        tweetsToAnalyze = Array.from({ length: 20 }).map((_, i) => {
-          const type = tweetTypes[Math.floor(Math.random() * tweetTypes.length)];
-          return {
-            text: `Mock tweet ${i} content for ${username}. Discussing tech, AI, and productivity.`,
-            likes: Math.floor(Math.random() * 100),
-            replies: Math.floor(Math.random() * 50),
-            reposts: Math.floor(Math.random() * 30),
-            type,
-            createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString()
-          };
-        });
-      }
-
-      // Log debugging metadata
-      console.log(`[Analysis Debug] User: ${username}`);
-      console.log(`- Data Source: ${dataSource}`);
-      console.log(`- Scraped Tweets: ${scrapedTweetCount}`);
-      console.log(`- Followers Source: ${followersSource}`);
-      console.log(`- Avatar Source: ${avatarSource}`);
-      console.log(`- Profile Loaded: ${profileLoaded}`);
-      console.log(`- Avatar Found: ${avatarFound}`);
-      console.log(`- Followers Found: ${followersFound}`);
-      console.log(`- Timeline Found: ${timelineFound}`);
-      console.log(`- Login Wall: ${loginWallDetected}`);
-      console.log(`- Failure Reason: ${scrapeFailureReason}`);
+      // Fallback to mock data generation
+      const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
+      const tweetsToAnalyze = Array.from({ length: 20 }).map((_, i) => {
+        const type = tweetTypes[Math.floor(Math.random() * tweetTypes.length)];
+        return {
+          text: `Mock tweet ${i} content for ${username}. Discussing tech, AI, and productivity.`,
+          likes: Math.floor(Math.random() * 100),
+          replies: Math.floor(Math.random() * 50),
+          reposts: Math.floor(Math.random() * 30),
+          type,
+          createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString()
+        };
+      });
 
       // Calculations
       const totalLikes = tweetsToAnalyze.reduce((sum, t) => sum + t.likes, 0);
@@ -138,14 +76,14 @@ async function startServer() {
                 role: "system",
                 content: `You are a social media analyst. Based ONLY on the provided tweet texts, return 4 or 5 one-word labels that describe the user's niche or profile type.
                 
-  Rules:
-  - Do not infer technical, crypto, or educational identity unless clearly supported by the text.
-  - If the tweets are too weak, short, or generic, return broad safe labels instead.
-  - Labels must stay strictly grounded in visible content.
-  - Avoid overconfident niche guesses.
-  - Valid broad labels include: Creator, Influencer, Athlete, Entertainer, PublicFigure, Promoter, Commentator, Personality.
-  
-  Return ONLY the labels separated by commas, no other text.`
+Rules:
+- Do not infer technical, crypto, or educational identity unless clearly supported by the text.
+- If the tweets are too weak, short, or generic, return broad safe labels instead.
+- Labels must stay strictly grounded in visible content.
+- Avoid overconfident niche guesses.
+- Valid broad labels include: Creator, Influencer, Athlete, Entertainer, PublicFigure, Promoter, Commentator, Personality.
+
+Return ONLY the labels separated by commas, no other text.`
               },
               {
                 role: "user",
@@ -167,6 +105,8 @@ async function startServer() {
           groqError = error instanceof Error ? error.message : String(error);
         }
       }
+
+      const finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
 
       // Final response
       const responseData = {
@@ -190,13 +130,13 @@ async function startServer() {
           scrapedTweetCount,
           followersSource,
           avatarSource,
-          profileLoaded,
-          avatarFound,
-          followersFound,
-          timelineFound,
-          loginWallDetected,
-          scrapeFailureReason,
-          error: scrapeException,
+          profileLoaded: false,
+          avatarFound: false,
+          followersFound: false,
+          timelineFound: false,
+          loginWallDetected: false,
+          scrapeFailureReason: "Scraping disabled for Vercel deployment verification",
+          error: null,
           groqError
         }
       };
