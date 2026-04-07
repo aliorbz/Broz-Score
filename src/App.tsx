@@ -32,6 +32,7 @@ interface AnalysisData {
     loginWallDetected: boolean;
     scrapeFailureReason: string | null;
     error?: string | null;
+    groqError?: string | null;
   };
 }
 
@@ -269,8 +270,17 @@ export default function App() {
     setScreen("loading");
     try {
       const response = await fetch(`/api/analyze?username=${encodeURIComponent(username)}`);
-      if (!response.ok) throw new Error("Failed to fetch analysis");
-      const data = await response.json();
+      
+      // Try to parse JSON regardless of status code
+      let data;
+      try {
+        data = await response.json();
+        console.log("[API Response]", data);
+      } catch (jsonError) {
+        console.error("JSON Parse Error:", jsonError);
+        throw new Error("Invalid API response format");
+      }
+
       setAnalysisData(data);
       // Keep loading screen visible for at least 2 seconds for effect
       setTimeout(() => {
