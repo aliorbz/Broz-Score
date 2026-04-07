@@ -24,7 +24,15 @@ async function startServer() {
     const username = (req.query.username as string) || "exampleuser";
     
     // Try to scrape real data
-    const scrapedData = await scrapeXProfile(username);
+    let scrapedData = null;
+    let scrapeException: string | null = null;
+    
+    try {
+      scrapedData = await scrapeXProfile(username);
+    } catch (error) {
+      console.error("[Scraper Exception]", error);
+      scrapeException = error instanceof Error ? error.message : String(error);
+    }
     
     let tweetsToAnalyze;
     let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
@@ -41,7 +49,7 @@ async function startServer() {
     let followersFound = false;
     let timelineFound = false;
     let loginWallDetected = false;
-    let scrapeFailureReason: string | null = null;
+    let scrapeFailureReason: string | null = scrapeException;
 
     if (scrapedData) {
       if (scrapedData.avatarUrl) {
@@ -51,19 +59,21 @@ async function startServer() {
       if (scrapedData.followers !== undefined) {
         followersSource = "scraped";
       }
-      if (scrapedData.tweets.length > 0) {
+      if (scrapedData.tweets && scrapedData.tweets.length > 0) {
         tweetsToAnalyze = scrapedData.tweets;
         scrapedTweetCount = scrapedData.tweets.length;
         dataSource = "real";
       }
 
       // Map detailed debug from scraper
-      profileLoaded = scrapedData.debug.profileLoaded;
-      avatarFound = scrapedData.debug.avatarFound;
-      followersFound = scrapedData.debug.followersFound;
-      timelineFound = scrapedData.debug.timelineFound;
-      loginWallDetected = scrapedData.debug.loginWallDetected;
-      scrapeFailureReason = scrapedData.debug.scrapeFailureReason;
+      if (scrapedData.debug) {
+        profileLoaded = scrapedData.debug.profileLoaded;
+        avatarFound = scrapedData.debug.avatarFound;
+        followersFound = scrapedData.debug.followersFound;
+        timelineFound = scrapedData.debug.timelineFound;
+        loginWallDetected = scrapedData.debug.loginWallDetected;
+        scrapeFailureReason = scrapedData.debug.scrapeFailureReason || scrapeException;
+      }
     }
 
     if (!tweetsToAnalyze) {
@@ -182,7 +192,8 @@ Return ONLY the labels separated by commas, no other text.`
         followersFound,
         timelineFound,
         loginWallDetected,
-        scrapeFailureReason
+        scrapeFailureReason,
+        error: scrapeException
       }
     };
 

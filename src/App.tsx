@@ -31,6 +31,7 @@ interface AnalysisData {
     timelineFound: boolean;
     loginWallDetected: boolean;
     scrapeFailureReason: string | null;
+    error?: string | null;
   };
 }
 
@@ -250,8 +251,8 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
       {/* Debug Info */}
       <div className="absolute bottom-4 right-4 text-[10px] font-mono text-off-white/20 pointer-events-none select-none text-right">
         <div>Source: {data.debug?.dataSource} | Tweets: {data.debug?.scrapedTweetCount}</div>
-        {data.debug?.scrapeFailureReason && (
-          <div className="text-red/40">Reason: {data.debug.scrapeFailureReason}</div>
+        {(data.debug?.scrapeFailureReason || data.debug?.error) && (
+          <div className="text-red/40">Reason: {data.debug.scrapeFailureReason || data.debug.error}</div>
         )}
       </div>
     </motion.div>
