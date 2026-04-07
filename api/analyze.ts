@@ -12,25 +12,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const username = (req.query.username as string) || "exampleuser";
   
   try {
-    // For now, return mock/calculated JSON only as requested
-    const dataSource: "real" | "mock" = "mock";
-    const scrapedTweetCount = 0;
-    const followersSource: "scraped" | "fallback" = "fallback";
-    const avatarSource: "scraped" | "fallback" = "fallback";
-    
-    // Fallback to mock data generation
-    const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
-    const tweetsToAnalyze = Array.from({ length: 20 }).map((_, i) => {
-      const type = tweetTypes[Math.floor(Math.random() * tweetTypes.length)];
-      return {
-        text: `Mock tweet ${i} content for ${username}. Discussing tech, AI, and productivity.`,
-        likes: Math.floor(Math.random() * 100),
-        replies: Math.floor(Math.random() * 50),
-        reposts: Math.floor(Math.random() * 30),
-        type,
-        createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString()
-      };
-    });
+    let scrapedData = null;
+    let scraperServiceUsed = false;
+    let scraperServiceSuccess = false;
+    let scraperError: string | null = null;
+
+    const scraperApiUrl = process.env.SCRAPER_API_URL;
+    if (scraperApiUrl) {
+      scraperServiceUsed = true;
+      try {
+        console.log(`[Scraper Service] Calling ${scraperApiUrl}/scrape?username=${username}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+        const response = await fetch(`${scraperApiUrl}/scrape?username=${username}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          scrapedData = await response.json();
+          scraperServiceSuccess = true;
+          console.log(`[Scraper Service] Success for ${username}`);
+        } else {
+          scraperError = `Service returned status ${response.status}`;
+          console.error(`[Scraper Service] Error: ${scraperError}`);
+        }
+      } catch (err) {
+        scraperError = err instanceof Error ? err.message : String(err);
+        console.error(`[Scraper Service] Exception: ${scraperError}`);
+      }
+    }
+
+    let tweetsToAnalyze;
+    let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+    let dataSource: "real" | "mock" = "mock";
+    let scrapedTweetCount = 0;
+    let followersSource: "scraped" | "fallback" = "fallback";
+    let avatarSource: "scraped" | "fallback" = "fallback";
+
+    if (scrapedData && scrapedData.tweets && scrapedData.tweets.length > 0) {
+      tweetsToAnalyze = scrapedData.tweets;
+      scrapedTweetCount = scrapedData.tweets.length;
+      dataSource = "real";
+      
+      if (scrapedData.avatarUrl) {
+        finalAvatarUrl = scrapedData.avatarUrl;
+        avatarSource = "scraped";
+      }
+      if (scrapedData.followers !== undefined) {
+        followersSource = "scraped";
+      }
+    } else {
+      // Fallback to mock data generation
+      const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
+      tweetsToAnalyze = Array.from({ length: 20 }).map((_, i) => {
+        const type = tweetTypes[Math.floor(Math.random() * tweetTypes.length)];
+        return {
+          text: `Mock tweet ${i} content for ${username}. Discussing tech, AI, and productivity.`,
+          likes: Math.floor(Math.random() * 100),
+          replies: Math.floor(Math.random() * 50),
+          reposts: Math.floor(Math.random() * 30),
+          type,
+          createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString()
+        };
+      });
+    }
 
     // Calculations
     const totalLikes = tweetsToAnalyze.reduce((sum, t) => sum + t.likes, 0);
@@ -94,8 +141,6 @@ Return ONLY the labels separated by commas, no other text.`
       }
     }
 
-    const finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
-
     // Final response
     const responseData = {
       username: username,
@@ -118,14 +163,16 @@ Return ONLY the labels separated by commas, no other text.`
         scrapedTweetCount,
         followersSource,
         avatarSource,
-        profileLoaded: false,
-        avatarFound: false,
-        followersFound: false,
-        timelineFound: false,
-        loginWallDetected: false,
-        scrapeFailureReason: "Scraping disabled for Vercel deployment verification",
-        error: null,
-        groqError
+        profileLoaded: scrapedData?.debug?.profileLoaded || false,
+        avatarFound: scrapedData?.debug?.avatarFound || false,
+        followersFound: scrapedData?.debug?.followersFound || false,
+        timelineFound: scrapedData?.debug?.timelineFound || false,
+        loginWallDetected: scrapedData?.debug?.loginWallDetected || false,
+        scrapeFailureReason: scrapedData?.debug?.scrapeFailureReason || scraperError || "Scraping disabled for Vercel deployment verification",
+        error: scraperError,
+        groqError,
+        scraperServiceUsed,
+        scraperServiceSuccess
       }
     };
 
