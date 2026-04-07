@@ -2,6 +2,38 @@ import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
 import { Search, AtSign, Heart, MessageCircle, TrendingUp, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
+// --- Types ---
+
+interface AnalysisData {
+  username: string;
+  avatarUrl?: string;
+  score: number;
+  stats: {
+    avgLikes: number;
+    avgReplies: number;
+    engagementRate: number;
+  };
+  bars: {
+    authenticity: number;
+    value: number;
+    influence: number;
+    activity: number;
+  };
+  niche: string[];
+  debug?: {
+    dataSource: string;
+    scrapedTweetCount: number;
+    followersSource: string;
+    avatarSource: string;
+    profileLoaded: boolean;
+    avatarFound: boolean;
+    followersFound: boolean;
+    timelineFound: boolean;
+    loginWallDetected: boolean;
+    scrapeFailureReason: string | null;
+  };
+}
+
 // --- Components ---
 
 const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label, index }) => {
@@ -108,7 +140,9 @@ const LoadingScreen: FC = () => (
   </motion.div>
 );
 
-const ResultScreen: FC = () => {
+const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
+  if (!data) return null;
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -120,7 +154,7 @@ const ResultScreen: FC = () => {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center">
           <div className="relative w-[251px] h-[251px] rounded-full overflow-hidden shadow-[0_0_21px_10px_rgba(217,217,217,0.6)]">
             <img 
-              src="https://picsum.photos/seed/broz/500/500" 
+              src={data.avatarUrl || "/media/logo.svg"} 
               alt="Profile" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -149,7 +183,7 @@ const ResultScreen: FC = () => {
             <div className="flex items-center gap-6">
               <Heart size={36} className="text-bg" />
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">30</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.stats.avgLikes}</span>
                 <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
               <TrendingUp size={28} className="text-bg ml-auto mr-10" />
@@ -157,7 +191,7 @@ const ResultScreen: FC = () => {
             <div className="flex items-center gap-6">
               <MessageCircle size={36} className="text-bg" />
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">30</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.stats.avgReplies}</span>
                 <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
               <TrendingUp size={28} className="text-bg ml-auto mr-10" />
@@ -167,7 +201,7 @@ const ResultScreen: FC = () => {
                  <TrendingUp size={22} className="text-bg" strokeWidth={3} />
               </div>
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">12.3%</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.stats.engagementRate}%</span>
               </div>
               <TrendingUp size={28} className="text-bg ml-auto mr-10" />
             </div>
@@ -179,7 +213,7 @@ const ResultScreen: FC = () => {
           <div className="card-shape w-full h-full"></div>
           <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
             <div className="flex items-baseline gap-1">
-              <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">66</span>
+              <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.score}</span>
               <span className="text-4xl font-condensed font-bold text-bg">/100</span>
             </div>
           </div>
@@ -190,10 +224,10 @@ const ResultScreen: FC = () => {
           <div className="card-shape w-full h-full scale-x-[-1] scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-8 pr-42 flex flex-col justify-center gap-6">
             {[
-              { width: "85%", label: "Authenticity" },
-              { width: "40%", label: "Value" },
-              { width: "65%", label: "Influence" },
-              { width: "75%", label: "Activity" }
+              { width: `${data.bars.authenticity}%`, label: "Authenticity" },
+              { width: `${data.bars.value}%`, label: "Value" },
+              { width: `${data.bars.influence}%`, label: "Influence" },
+              { width: `${data.bars.activity}%`, label: "Activity" }
             ].map((bar, i) => (
               <Bar key={i} width={bar.width} label={bar.label} index={i} />
             ))}
@@ -204,19 +238,21 @@ const ResultScreen: FC = () => {
         <div className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-38 pr-4 py-10 flex flex-row flex-wrap content-center items-center justify-center gap-3">
-            {[
-              "Creator",
-              "Educator",
-              "Promoter",
-              "Storyteller",
-              "Analyst"
-            ].map((label, i) => (
+            {data.niche.map((label, i) => (
               <div key={i} className="bg-bg text-off-white px-5 py-2 rounded-xl text-[26px] font-condensed font-bold leading-none tracking-tight hover:scale-105 transition-transform cursor-default shadow-sm border border-off-white/10">
                 {label}
               </div>
             ))}
           </div>
         </div>
+      </div>
+      
+      {/* Debug Info */}
+      <div className="absolute bottom-4 right-4 text-[10px] font-mono text-off-white/20 pointer-events-none select-none text-right">
+        <div>Source: {data.debug?.dataSource} | Tweets: {data.debug?.scrapedTweetCount}</div>
+        {data.debug?.scrapeFailureReason && (
+          <div className="text-red/40">Reason: {data.debug.scrapeFailureReason}</div>
+        )}
       </div>
     </motion.div>
   );
@@ -226,20 +262,25 @@ const ResultScreen: FC = () => {
 
 export default function App() {
   const [screen, setScreen] = useState<"search" | "loading" | "result">("search");
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
 
-  const handleSearch = (username: string) => {
-    console.log("Searching for:", username);
+  const handleSearch = async (username: string) => {
     setScreen("loading");
-  };
-
-  useEffect(() => {
-    if (screen === "loading") {
-      const timer = setTimeout(() => {
+    try {
+      const response = await fetch(`/api/analyze?username=${encodeURIComponent(username)}`);
+      if (!response.ok) throw new Error("Failed to fetch analysis");
+      const data = await response.json();
+      setAnalysisData(data);
+      // Keep loading screen visible for at least 2 seconds for effect
+      setTimeout(() => {
         setScreen("result");
-      }, 2500);
-      return () => clearTimeout(timer);
+      }, 2000);
+    } catch (error) {
+      console.error("Analysis error:", error);
+      setScreen("search");
+      alert("Failed to analyze account. Please try again.");
     }
-  }, [screen]);
+  };
 
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20">
@@ -254,7 +295,7 @@ export default function App() {
             <LoadingScreen key="loading" />
           )}
           {screen === "result" && (
-            <ResultScreen key="result" />
+            <ResultScreen key="result" data={analysisData} />
           )}
         </AnimatePresence>
       </div>

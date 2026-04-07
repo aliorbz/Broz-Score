@@ -1,0 +1,212 @@
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
+import Groq from "groq-sdk";
+import dotenv from "dotenv";
+import { scrapeXProfile } from "./src/lib/scraper.js";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  // API routes
+  app.get("/api/analyze", async (req, res) => {
+    const username = (req.query.username as string) || "exampleuser";
+    
+    // Try to scrape real data
+    const scrapedData = await scrapeXProfile(username);
+    
+    let tweetsToAnalyze;
+    let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+    
+    // Debugging metadata
+    let dataSource: "real" | "mock" = "mock";
+    let scrapedTweetCount = 0;
+    let followersSource: "scraped" | "fallback" = "fallback";
+    let avatarSource: "scraped" | "fallback" = "fallback";
+    
+    // Detailed scraper debug
+    let profileLoaded = false;
+    let avatarFound = false;
+    let followersFound = false;
+    let timelineFound = false;
+    let loginWallDetected = false;
+    let scrapeFailureReason: string | null = null;
+
+    if (scrapedData) {
+      if (scrapedData.avatarUrl) {
+        finalAvatarUrl = scrapedData.avatarUrl;
+        avatarSource = "scraped";
+      }
+      if (scrapedData.followers !== undefined) {
+        followersSource = "scraped";
+      }
+      if (scrapedData.tweets.length > 0) {
+        tweetsToAnalyze = scrapedData.tweets;
+        scrapedTweetCount = scrapedData.tweets.length;
+        dataSource = "real";
+      }
+
+      // Map detailed debug from scraper
+      profileLoaded = scrapedData.debug.profileLoaded;
+      avatarFound = scrapedData.debug.avatarFound;
+      followersFound = scrapedData.debug.followersFound;
+      timelineFound = scrapedData.debug.timelineFound;
+      loginWallDetected = scrapedData.debug.loginWallDetected;
+      scrapeFailureReason = scrapedData.debug.scrapeFailureReason;
+    }
+
+    if (!tweetsToAnalyze) {
+      // Fallback to mock data generation
+      const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
+      tweetsToAnalyze = Array.from({ length: 20 }).map((_, i) => {
+        const type = tweetTypes[Math.floor(Math.random() * tweetTypes.length)];
+        return {
+          text: `Mock tweet ${i} content for ${username}. Discussing tech, AI, and productivity.`,
+          likes: Math.floor(Math.random() * 100),
+          replies: Math.floor(Math.random() * 50),
+          reposts: Math.floor(Math.random() * 30),
+          type,
+          createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString()
+        };
+      });
+    }
+
+    // Log debugging metadata
+    console.log(`[Analysis Debug] User: ${username}`);
+    console.log(`- Data Source: ${dataSource}`);
+    console.log(`- Scraped Tweets: ${scrapedTweetCount}`);
+    console.log(`- Followers Source: ${followersSource}`);
+    console.log(`- Avatar Source: ${avatarSource}`);
+    console.log(`- Profile Loaded: ${profileLoaded}`);
+    console.log(`- Avatar Found: ${avatarFound}`);
+    console.log(`- Followers Found: ${followersFound}`);
+    console.log(`- Timeline Found: ${timelineFound}`);
+    console.log(`- Login Wall: ${loginWallDetected}`);
+    console.log(`- Failure Reason: ${scrapeFailureReason}`);
+
+    // Calculations
+    const totalLikes = tweetsToAnalyze.reduce((sum, t) => sum + t.likes, 0);
+    const totalReplies = tweetsToAnalyze.reduce((sum, t) => sum + t.replies, 0);
+    const totalReposts = tweetsToAnalyze.reduce((sum, t) => sum + t.reposts, 0);
+    const numTweets = tweetsToAnalyze.length;
+
+    const avgLikes = Math.round(totalLikes / numTweets);
+    const avgReplies = Math.round(totalReplies / numTweets);
+    const totalEngagement = totalLikes + totalReplies + totalReposts;
+    const engagementRate = parseFloat(((totalEngagement / numTweets) / 5).toFixed(1));
+
+    const originalTweets = tweetsToAnalyze.filter(t => t.type === "original").length;
+    const authenticity = Math.min(100, Math.round((originalTweets / numTweets) * 100 + 20));
+    const value = Math.min(100, Math.round((totalReposts / numTweets) * 3 + 40));
+    const influence = Math.min(100, Math.round((totalEngagement / 100) + 30));
+    const activity = Math.min(100, Math.round(80 + Math.random() * 15));
+
+    const score = Math.round((authenticity + value + influence + activity) / 4);
+
+    // Generate niche using Groq
+    let niche = ["Creator", "Educator", "Analyst", "Promoter"]; // Default fallback
+    
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const tweetTexts = tweetsToAnalyze.map(t => t.text).join("\n");
+        const completion = await groq.chat.completions.create({
+          messages: [
+            {
+              role: "system",
+              content: `You are a social media analyst. Based ONLY on the provided tweet texts, return 4 or 5 one-word labels that describe the user's niche or profile type.
+              
+Rules:
+- Do not infer technical, crypto, or educational identity unless clearly supported by the text.
+- If the tweets are too weak, short, or generic, return broad safe labels instead.
+- Labels must stay strictly grounded in visible content.
+- Avoid overconfident niche guesses.
+- Valid broad labels include: Creator, Influencer, Athlete, Entertainer, PublicFigure, Promoter, Commentator, Personality.
+
+Return ONLY the labels separated by commas, no other text.`
+            },
+            {
+              role: "user",
+              content: `Analyze these tweets for user ${username}:\n\n${tweetTexts}`
+            }
+          ],
+          model: "llama-3.3-70b-versatile",
+        });
+
+        const responseText = completion.choices[0]?.message?.content;
+        if (responseText) {
+          const labels = responseText.split(",").map(s => s.trim().replace(/[.]/g, "")).filter(s => s.length > 0);
+          if (labels.length >= 3) {
+            niche = labels.slice(0, 5);
+          }
+        }
+      } catch (error) {
+        console.error("Groq API error:", error);
+      }
+    }
+
+    // Mock response
+    const mockData = {
+      username: username,
+      avatarUrl: finalAvatarUrl,
+      score,
+      stats: {
+        avgLikes,
+        avgReplies,
+        engagementRate
+      },
+      bars: {
+        authenticity,
+        value,
+        influence,
+        activity
+      },
+      niche,
+      debug: {
+        dataSource,
+        scrapedTweetCount,
+        followersSource,
+        avatarSource,
+        profileLoaded,
+        avatarFound,
+        followersFound,
+        timelineFound,
+        loginWallDetected,
+        scrapeFailureReason
+      }
+    };
+
+    res.json(mockData);
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();
