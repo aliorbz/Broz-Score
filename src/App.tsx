@@ -1,9 +1,45 @@
-import { useState, useEffect, FormEvent, FC } from "react";
+import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
 import { Search, AtSign, Heart, MessageCircle, TrendingUp, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { analyzeProfile, ProfileData } from "./api";
 
 // --- Components ---
+
+const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label, index }) => {
+  const [mousePos, setMousePos] = useState(50);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const percentage = (x / rect.width) * 100;
+      setMousePos(percentage);
+    }
+  };
+
+  return (
+    <div 
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      className="group relative cursor-pointer"
+    >
+      <div className="w-full h-6 bg-off-white rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width }}
+          transition={{ duration: 1, delay: 0.5 + index * 0.1 }}
+          className="h-full bg-bg rounded-full group-hover:opacity-80 transition-opacity"
+        />
+      </div>
+      <div 
+        style={{ left: `${mousePos}%` }}
+        className="absolute -top-12 -translate-x-1/2 bg-bg text-off-white px-4 py-1.5 rounded-lg text-xl font-condensed opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-40 shadow-xl"
+      >
+        {label}
+      </div>
+    </div>
+  );
+};
 
 const MobileRestriction = () => (
   <div className="fixed inset-0 bg-bg z-50 flex items-center justify-center p-8 text-center lg:hidden">
@@ -72,7 +108,7 @@ const LoadingScreen: FC = () => (
   </motion.div>
 );
 
-const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
+const ResultScreen: FC = () => {
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -82,30 +118,26 @@ const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
       <div className="relative w-[1000px] h-[560px]">
         {/* Central Hub */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center">
-          <div className="relative w-64 h-64 rounded-full bg-bg flex items-center justify-center hub-glow shadow-2xl">
-            <div className="w-[92%] h-[92%] rounded-full bg-off-white flex items-center justify-center">
-              <div className="w-[88%] h-[88%] rounded-full overflow-hidden border-[4px] border-bg">
-                <img 
-                  src={data.avatar} 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            </div>
+          <div className="relative w-[251px] h-[251px] rounded-full overflow-hidden shadow-[0_0_21px_10px_rgba(217,217,217,0.6)]">
+            <img 
+              src="https://picsum.photos/seed/broz/500/500" 
+              alt="Profile" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
           
           {/* Connection Icons - Positioned precisely at intersections */}
-          <div className="absolute -top-32 left-4 w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[4px] border-bg shadow-lg">
+          <div className="absolute top-[-125.5px] left-[17px] w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[2px] border-bg shadow-[0_4px_6.6px_3px_rgba(0,0,0,0.25)] scale-115">
             <User size={34} className="text-bg" strokeWidth={2.5} />
           </div>
-          <div className="absolute -top-32 right-4 w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[4px] border-bg shadow-lg">
+          <div className="absolute top-[-125.5px] right-[17px] w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[2px] border-bg shadow-[0_4px_6.6px_3px_rgba(0,0,0,0.25)] scale-115">
             <CheckCircle2 size={34} className="text-bg" strokeWidth={2.5} />
           </div>
-          <div className="absolute -bottom-32 left-4 w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[4px] border-bg shadow-lg">
+          <div className="absolute bottom-[-125.5px] left-[17px] w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[2px] border-bg shadow-[0_4px_6.6px_3px_rgba(0,0,0,0.25)] scale-115">
             <AlignLeft size={34} className="text-bg" strokeWidth={2.5} />
           </div>
-          <div className="absolute -bottom-32 right-4 w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[4px] border-bg shadow-lg">
+          <div className="absolute bottom-[-125.5px] right-[17px] w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[2px] border-bg shadow-[0_4px_6.6px_3px_rgba(0,0,0,0.25)] scale-115">
             <Hash size={34} className="text-bg" strokeWidth={2.5} />
           </div>
         </div>
@@ -115,29 +147,29 @@ const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
           <div className="card-shape w-full h-full scale-x-[-1]"></div>
           <div className="absolute inset-0 pl-14 pr-36 py-10 flex flex-col justify-center gap-4">
             <div className="flex items-center gap-6">
-              <Heart size={36} className="text-bg" fill="currentColor" />
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.likes.split(' ')[0]}</span>
-                {data.likes.includes(' ') && <span className="text-xl font-condensed text-bg/60 uppercase">{data.likes.split(' ').slice(1).join(' ')}</span>}
+              <Heart size={36} className="text-bg" />
+              <div className="flex items-baseline gap-1.5 ml-4">
+                <span className="text-5xl font-condensed text-bg leading-none">30</span>
+                <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
-              <TrendingUp size={28} className="text-bg/30 ml-auto" />
+              <TrendingUp size={28} className="text-bg ml-auto mr-10" />
             </div>
             <div className="flex items-center gap-6">
-              <MessageCircle size={36} className="text-bg" fill="currentColor" />
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.comments.split(' ')[0]}</span>
-                {data.comments.includes(' ') && <span className="text-xl font-condensed text-bg/60 uppercase">{data.comments.split(' ').slice(1).join(' ')}</span>}
+              <MessageCircle size={36} className="text-bg" />
+              <div className="flex items-baseline gap-1.5 ml-4">
+                <span className="text-5xl font-condensed text-bg leading-none">30</span>
+                <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
-              <TrendingUp size={28} className="text-bg/30 ml-auto" />
+              <TrendingUp size={28} className="text-bg ml-auto mr-10" />
             </div>
             <div className="flex items-center gap-6">
               <div className="w-9 h-9 border-[3px] border-bg rounded flex items-center justify-center">
                  <TrendingUp size={22} className="text-bg" strokeWidth={3} />
               </div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.engagementRate}</span>
+              <div className="flex items-baseline gap-1.5 ml-4">
+                <span className="text-5xl font-condensed text-bg leading-none">12.3%</span>
               </div>
-              <TrendingUp size={28} className="text-bg/30 ml-auto" />
+              <TrendingUp size={28} className="text-bg ml-auto mr-10" />
             </div>
           </div>
         </div>
@@ -145,30 +177,25 @@ const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
         {/* Top Right - SCORE */}
         <div className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full"></div>
-          <div className="absolute inset-0 pl-36 pr-14 py-10 flex items-center justify-center gap-1">
-            <span className="text-[180px] font-condensed font-bold text-bg leading-none tracking-tighter">{data.score}</span>
-            <span className="text-4xl font-condensed font-bold text-bg mt-20">/100</span>
+          <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
+            <div className="flex items-baseline gap-1">
+              <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">66</span>
+              <span className="text-4xl font-condensed font-bold text-bg">/100</span>
+            </div>
           </div>
         </div>
 
         {/* Bottom Left - TYPE */}
         <div className="absolute bottom-0 left-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-x-[-1] scale-y-[-1]"></div>
-          <div className="absolute inset-0 pl-14 pr-36 py-10 flex flex-col justify-center gap-4">
-            {data.archetypes.map((bar, i) => (
-              <div key={i} className="group relative cursor-pointer">
-                <div className="w-full h-8 bg-off-white rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: bar.width }}
-                    transition={{ duration: 1, delay: 0.5 + i * 0.1 }}
-                    className="h-full bg-bg rounded-full group-hover:opacity-80 transition-opacity"
-                  />
-                </div>
-                <div className="absolute left-1/2 -top-12 -translate-x-1/2 bg-bg text-off-white px-4 py-1.5 rounded-lg text-xl font-condensed opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-40 shadow-xl">
-                  {bar.label}
-                </div>
-              </div>
+          <div className="absolute inset-0 pl-8 pr-42 flex flex-col justify-center gap-6">
+            {[
+              { width: "85%", label: "Authenticity" },
+              { width: "40%", label: "Value" },
+              { width: "65%", label: "Influence" },
+              { width: "75%", label: "Activity" }
+            ].map((bar, i) => (
+              <Bar key={i} width={bar.width} label={bar.label} index={i} />
             ))}
           </div>
         </div>
@@ -176,10 +203,16 @@ const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
         {/* Bottom Right - NICHE */}
         <div className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-y-[-1]"></div>
-          <div className="absolute inset-0 pl-36 pr-14 py-10 flex flex-col justify-center gap-1">
-            {data.niches.map((niche, i) => (
-              <div key={i} className="text-[32px] font-condensed font-bold text-bg leading-tight tracking-tight hover:translate-x-2 transition-transform cursor-default">
-                {niche}
+          <div className="absolute inset-0 pl-38 pr-4 py-10 flex flex-row flex-wrap content-center items-center justify-center gap-3">
+            {[
+              "Creator",
+              "Educator",
+              "Promoter",
+              "Storyteller",
+              "Analyst"
+            ].map((label, i) => (
+              <div key={i} className="bg-bg text-off-white px-5 py-2 rounded-xl text-[26px] font-condensed font-bold leading-none tracking-tight hover:scale-105 transition-transform cursor-default shadow-sm border border-off-white/10">
+                {label}
               </div>
             ))}
           </div>
@@ -193,24 +226,20 @@ const ResultScreen: FC<{ data: ProfileData }> = ({ data }) => {
 
 export default function App() {
   const [screen, setScreen] = useState<"search" | "loading" | "result">("search");
-  const [data, setData] = useState<ProfileData | null>(null);
 
-  const handleSearch = async (username: string) => {
+  const handleSearch = (username: string) => {
     console.log("Searching for:", username);
     setScreen("loading");
-    try {
-      // Run the API call alongside a minimum 2.5s delay to show the loading animation
-      const [aiData] = await Promise.all([
-        analyzeProfile(username),
-        new Promise(resolve => setTimeout(resolve, 2500))
-      ]);
-      setData(aiData);
-      setScreen("result");
-    } catch (e) {
-      console.error(e);
-      setScreen("search");
-    }
   };
+
+  useEffect(() => {
+    if (screen === "loading") {
+      const timer = setTimeout(() => {
+        setScreen("result");
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [screen]);
 
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20">
@@ -224,8 +253,8 @@ export default function App() {
           {screen === "loading" && (
             <LoadingScreen key="loading" />
           )}
-          {screen === "result" && data && (
-            <ResultScreen key="result" data={data} />
+          {screen === "result" && (
+            <ResultScreen key="result" />
           )}
         </AnimatePresence>
       </div>

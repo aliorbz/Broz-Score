@@ -1,12 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Condensed:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Text:wght@100..900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --color-bg: #303332;
   --color-off-white: #D9D9D9;
   --color-red: #FF4E46;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-condensed: "Roboto Condensed", sans-serif;
+  --font-sans: "Big Shoulders Text", ui-sans-serif, system-ui, sans-serif;
+  --font-condensed: "Big Shoulders Text", sans-serif;
 }
 
 @layer base {
@@ -28,13 +28,4 @@
 
 .animate-pulse-logo {
   animation: pulse-logo 2s ease-in-out infinite;
-}
-
-@keyframes glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 78, 70, 0.2); }
-  50% { box-shadow: 0 0 40px rgba(255, 78, 70, 0.4); }
-}
-
-.hub-glow {
-  animation: glow 3s ease-in-out infinite;
 }
