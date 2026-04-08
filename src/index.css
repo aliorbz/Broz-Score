@@ -16,7 +16,7 @@
 }
 
 .card-shape {
-  background-image: url('/media/Subtract.svg');
+  background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjY3IiBoZWlnaHQ9IjEzMiIgdmlld0JveD0iMCAwIDI2NyAxMzIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0yNjcgMTA3QzI2NyAxMjAuODA3IDI1NS44MDcgMTMyIDI0MiAxMzJIMTA1QzkxLjE5MjkgMTMyIDgwLjM4NzggMTIwLjUzNyA3Ni4xNDU3IDEwNy4zOTdDNjguMjY5OCA4My4wMDMxIDQ4Ljk5NjkgNjMuNzMwMiAyNC42MDI2IDU1Ljg1NDNDMTEuNDYzMyA1MS42MTIyIDAgNDAuODA3MSAwIDI3VjI1QzAgMTEuMTkyOSAxMS4xOTI5IDAgMjUgMEgyNDJDMjU1LjgwNyAwIDI2NyAxMS4xOTI5IDI2NyAyNVYxMDdaIiBmaWxsPSIjRkY0RTQ2Ii8+Cjwvc3ZnPgo=');
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
