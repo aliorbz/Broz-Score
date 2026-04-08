@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
 import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import logo from "./media/logo.svg";
 
 // --- Types ---
 
@@ -146,7 +147,7 @@ const LoadingScreen: FC = () => (
   >
     <div className="w-[66px] h-[66px] animate-spin-pause rounded-lg overflow-hidden">
       <img 
-        src="/media/logo.svg" 
+        src={logo} 
         alt="Loading..." 
         className="w-full h-full object-cover" 
       />
