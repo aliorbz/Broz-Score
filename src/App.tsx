@@ -99,7 +99,7 @@ const SearchScreen: FC<{ onSearch: (username: string) => void }> = ({ onSearch }
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex flex-col items-center justify-center h-screen relative"
+      className="flex flex-col items-center justify-center w-[1000px] h-[560px] relative"
     >
       <form 
         onSubmit={handleSubmit}
@@ -135,7 +135,7 @@ const LoadingScreen: FC = () => (
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className="flex flex-col items-center justify-center h-screen relative"
+    className="flex flex-col items-center justify-center w-[1000px] h-[560px] relative"
   >
     <div className="w-[66px] h-[66px] animate-spin-pause rounded-lg overflow-hidden">
       <img 
@@ -290,6 +290,21 @@ export default function App() {
     comments: 'up' | 'down' | 'neutral';
     rate: 'up' | 'down' | 'neutral';
   } | null>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      if (width < 1000) {
+        setScale(width / 1000);
+      } else {
+        setScale(1);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const cleanUsername = (input: string) => {
     let cleaned = input.trim();
@@ -351,8 +366,19 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20 overflow-x-auto">
-      <div className="min-w-[1000px] w-full flex items-center justify-center">
+    <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20 overflow-hidden">
+      <div 
+        style={{ 
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          width: '1000px',
+          height: '560px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}
+      >
         <AnimatePresence mode="wait">
           {screen === "search" && (
             <SearchScreen 
