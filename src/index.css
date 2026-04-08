@@ -11,7 +11,7 @@
 
 @layer base {
   body {
-    @apply bg-bg text-off-white font-sans overflow-hidden;
+    @apply bg-bg text-off-white font-sans;
   }
 }
 

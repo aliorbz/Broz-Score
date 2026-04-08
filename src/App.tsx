@@ -84,14 +84,6 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
   );
 };
 
-const MobileRestriction = () => (
-  <div className="fixed inset-0 bg-bg z-50 flex items-center justify-center p-8 text-center lg:hidden">
-    <p className="text-xl font-medium text-off-white/80">
-      Broz Score is currently available only on desktop.
-    </p>
-  </div>
-);
-
 const SearchScreen: FC<{ onSearch: (username: string) => void }> = ({ onSearch }) => {
   const [username, setUsername] = useState("");
 
@@ -111,7 +103,7 @@ const SearchScreen: FC<{ onSearch: (username: string) => void }> = ({ onSearch }
     >
       <form 
         onSubmit={handleSubmit}
-        className="relative w-full max-w-2xl group"
+        className="relative w-[672px] group"
       >
         <div className="absolute left-6 top-1/2 -translate-y-1/2 text-bg/60">
           <AtSign size={24} />
@@ -182,7 +174,7 @@ const ResultScreen: FC<{
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="relative w-full h-screen flex items-center justify-center"
+      className="relative w-[1000px] h-screen flex items-center justify-center mx-auto"
     >
       <div className="relative w-[1000px] h-[560px]">
         {/* Central Hub */}
@@ -359,10 +351,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20">
-      <MobileRestriction />
-      
-      <div className="hidden lg:block w-full">
+    <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20 overflow-x-auto">
+      <div className="min-w-[1000px] w-full flex items-center justify-center">
         <AnimatePresence mode="wait">
           {screen === "search" && (
             <SearchScreen 
