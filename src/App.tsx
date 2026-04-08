@@ -148,7 +148,7 @@ const LoadingScreen: FC = () => (
       <img 
         src="/media/logo.svg" 
         alt="Loading..." 
-        className="w-full h-full object-contain" 
+        className="w-full h-full object-cover" 
       />
     </div>
     <p className="absolute bottom-12 text-off-white/60 text-2xl font-condensed tracking-wider animate-dots">
