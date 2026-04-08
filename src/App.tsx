@@ -1,42 +1,48 @@
 import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
-import { Search, AtSign, Heart, MessageCircle, TrendingUp, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
+import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 // --- Types ---
 
 interface AnalysisData {
   username: string;
-  avatarUrl?: string;
-  score: number;
-  stats: {
-    avgLikes: number;
-    avgReplies: number;
-    engagementRate: number;
+  profile: {
+    display_name: string;
+    bio: string;
+    location: string;
+    avatar_url: string;
+    followers: number;
+    following: number;
+    tweet_count: number;
+    joined: string;
+    verified: boolean;
   };
-  bars: {
-    authenticity: number;
-    value: number;
-    influence: number;
-    activity: number;
+  engagement: {
+    average_likes: number;
+    average_comments: number;
+    engagement_rate: number;
   };
-  niche: string[];
-  debug?: {
-    dataSource: string;
-    scrapedTweetCount: number;
-    followersSource: string;
-    avatarSource: string;
-    profileLoaded: boolean;
-    avatarFound: boolean;
-    followersFound: boolean;
-    timelineFound: boolean;
-    loginWallDetected: boolean;
-    scrapeFailureReason: string | null;
-    error?: string | null;
-    groqError?: string | null;
-    rapidApiUsed?: boolean;
-    rapidApiSuccess?: boolean;
+  score: {
+    total: number;
+    grade: string;
+    breakdown: {
+      authenticity: number;
+      value: number;
+      influence: number;
+      activity: number;
+    };
+    reasoning: string;
   };
+  niches: string[];
+  scraped_at: string;
+  from_cache: boolean;
 }
+
+const formatNumber = (num: number) => {
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return num.toString();
+};
 
 // --- Components ---
 
@@ -144,8 +150,25 @@ const LoadingScreen: FC = () => (
   </motion.div>
 );
 
-const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
+const ResultScreen: FC<{ 
+  data: AnalysisData | null;
+  trends: {
+    likes: 'up' | 'down' | 'neutral';
+    comments: 'up' | 'down' | 'neutral';
+    rate: 'up' | 'down' | 'neutral';
+  } | null;
+}> = ({ data, trends }) => {
   if (!data) return null;
+
+  const getTrendIcon = (type: 'up' | 'down' | 'neutral', size: number = 28) => {
+    const Icon = type === 'down' ? TrendingDown : TrendingUp;
+    return <Icon size={size} className="text-bg shrink-0" />;
+  };
+
+  const formatRate = (rate: number) => {
+    if (rate > 0 && rate < 0.01) return "<0.01%";
+    return `${rate.toFixed(2)}%`;
+  };
 
   return (
     <motion.div 
@@ -158,7 +181,7 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center">
           <div className="relative w-[251px] h-[251px] rounded-full overflow-hidden shadow-[0_0_21px_10px_rgba(217,217,217,0.6)]">
             <img 
-              src={data.avatarUrl || "/media/logo.svg"} 
+              src={data.profile.avatar_url || "/media/logo.svg"} 
               alt="Profile" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -185,29 +208,29 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
           <div className="card-shape w-full h-full scale-x-[-1]"></div>
           <div className="absolute inset-0 pl-14 pr-36 py-10 flex flex-col justify-center gap-4">
             <div className="flex items-center gap-6">
-              <Heart size={36} className="text-bg" />
+              <Heart size={36} className="text-bg shrink-0" />
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.stats.avgLikes}</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_likes}</span>
                 <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
-              <TrendingUp size={28} className="text-bg ml-auto mr-10" />
+              {getTrendIcon(trends?.likes || 'neutral')}
             </div>
             <div className="flex items-center gap-6">
-              <MessageCircle size={36} className="text-bg" />
+              <MessageCircle size={36} className="text-bg shrink-0" />
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.stats.avgReplies}</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_comments}</span>
                 <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
-              <TrendingUp size={28} className="text-bg ml-auto mr-10" />
+              {getTrendIcon(trends?.comments || 'neutral')}
             </div>
             <div className="flex items-center gap-6">
-              <div className="w-9 h-9 border-[3px] border-bg rounded flex items-center justify-center">
+              <div className="w-9 h-9 border-[3px] border-bg rounded flex items-center justify-center shrink-0">
                  <TrendingUp size={22} className="text-bg" strokeWidth={3} />
               </div>
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.stats.engagementRate}%</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{formatRate(data.engagement.engagement_rate)}</span>
               </div>
-              <TrendingUp size={28} className="text-bg ml-auto mr-10" />
+              {getTrendIcon(trends?.rate || 'neutral')}
             </div>
           </div>
         </div>
@@ -216,9 +239,11 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
         <div className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full"></div>
           <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
-            <div className="flex items-baseline gap-1">
-              <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.score}</span>
-              <span className="text-4xl font-condensed font-bold text-bg">/100</span>
+            <div className="flex items-baseline gap-4">
+              <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.score.total}</span>
+              <div className="flex flex-col">
+                <span className="text-4xl font-condensed font-bold text-bg">/100</span>
+              </div>
             </div>
           </div>
         </div>
@@ -228,12 +253,12 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
           <div className="card-shape w-full h-full scale-x-[-1] scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-8 pr-42 flex flex-col justify-center gap-6">
             {[
-              { width: `${data.bars.authenticity}%`, label: "Authenticity" },
-              { width: `${data.bars.value}%`, label: "Value" },
-              { width: `${data.bars.influence}%`, label: "Influence" },
-              { width: `${data.bars.activity}%`, label: "Activity" }
+              { val: data.score.breakdown.authenticity, label: "Authenticity" },
+              { val: data.score.breakdown.value, label: "Value" },
+              { val: data.score.breakdown.influence, label: "Influence" },
+              { val: data.score.breakdown.activity, label: "Activity" }
             ].map((bar, i) => (
-              <Bar key={i} width={bar.width} label={bar.label} index={i} />
+              <Bar key={i} width={`${(bar.val / 25) * 100}%`} label={bar.label} index={i} />
             ))}
           </div>
         </div>
@@ -242,7 +267,7 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
         <div className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-38 pr-4 py-10 flex flex-row flex-wrap content-center items-center justify-center gap-3">
-            {data.niche.map((label, i) => (
+            {data.niches.map((label, i) => (
               <div key={i} className="bg-bg text-off-white px-5 py-2 rounded-xl text-[26px] font-condensed font-bold leading-none tracking-tight hover:scale-105 transition-transform cursor-default shadow-sm border border-off-white/10">
                 {label}
               </div>
@@ -251,18 +276,6 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
         </div>
       </div>
       
-      {/* Debug Info */}
-      <div className="absolute bottom-4 right-4 text-[10px] font-mono text-off-white/20 pointer-events-none select-none text-right">
-        <div>Source: {data.debug?.dataSource} | Tweets: {data.debug?.scrapedTweetCount}</div>
-        {data.debug?.rapidApiUsed && (
-          <div className={data.debug.rapidApiSuccess ? "text-green-400/40" : "text-yellow-400/40"}>
-            RapidAPI: {data.debug.rapidApiSuccess ? "Success" : "Failed"}
-          </div>
-        )}
-        {(data.debug?.scrapeFailureReason || data.debug?.error) && (
-          <div className="text-red/40">Reason: {data.debug.scrapeFailureReason || data.debug.error}</div>
-        )}
-      </div>
     </motion.div>
   );
 };
@@ -272,29 +285,66 @@ const ResultScreen: FC<{ data: AnalysisData | null }> = ({ data }) => {
 export default function App() {
   const [screen, setScreen] = useState<"search" | "loading" | "result">("search");
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [trends, setTrends] = useState<{
+    likes: 'up' | 'down' | 'neutral';
+    comments: 'up' | 'down' | 'neutral';
+    rate: 'up' | 'down' | 'neutral';
+  } | null>(null);
 
-  const handleSearch = async (username: string) => {
+  const cleanUsername = (input: string) => {
+    let cleaned = input.trim();
+    // Remove URL prefix if present
+    cleaned = cleaned.replace(/^(https?:\/\/)?(www\.)?(x\.com|twitter\.com)\//, '');
+    // Remove @ if present
+    cleaned = cleaned.replace(/^@/, '');
+    // Remove trailing slashes or query params
+    cleaned = cleaned.split(/[/?#]/)[0];
+    return cleaned;
+  };
+
+  const handleSearch = async (input: string) => {
+    const username = cleanUsername(input);
+    if (!username) return;
+
+    setAnalysisData(null);
     setScreen("loading");
+
     try {
-      const response = await fetch(`/api/analyze?username=${encodeURIComponent(username)}`);
+      const baseUrl = "https://750b83d6-882c-457a-a53e-3efb317fce41-00-xbx811ydhsvz.riker.replit.dev/api";
+      const response = await fetch(`${baseUrl}/score/${encodeURIComponent(username)}`);
       
-      // Try to parse JSON regardless of status code
-      let data;
-      try {
-        data = await response.json();
-        console.log("[API Response]", data);
-      } catch (jsonError) {
-        console.error("JSON Parse Error:", jsonError);
-        throw new Error("Invalid API response format");
+      if (!response.ok) {
+        throw new Error("Failed to fetch analysis");
       }
 
+      const data: AnalysisData = await response.json();
+      
+      // Calculate trends
+      const prevDataStr = localStorage.getItem("previous_twitter_score");
+      const prevData = prevDataStr ? JSON.parse(prevDataStr) : null;
+
+      if (prevData) {
+        setTrends({
+          likes: data.engagement.average_likes > prevData.average_likes ? 'up' : data.engagement.average_likes < prevData.average_likes ? 'down' : 'neutral',
+          comments: data.engagement.average_comments > prevData.average_comments ? 'up' : data.engagement.average_comments < prevData.average_comments ? 'down' : 'neutral',
+          rate: data.engagement.engagement_rate > prevData.engagement_rate ? 'up' : data.engagement.engagement_rate < prevData.engagement_rate ? 'down' : 'neutral',
+        });
+      } else {
+        setTrends({ likes: 'neutral', comments: 'neutral', rate: 'neutral' });
+      }
+
+      // Save to localStorage
+      localStorage.setItem("previous_twitter_score", JSON.stringify({
+        username: data.username,
+        average_likes: data.engagement.average_likes,
+        average_comments: data.engagement.average_comments,
+        engagement_rate: data.engagement.engagement_rate
+      }));
+
       setAnalysisData(data);
-      // Keep loading screen visible for at least 2 seconds for effect
-      setTimeout(() => {
-        setScreen("result");
-      }, 2000);
-    } catch (error) {
-      console.error("Analysis error:", error);
+      setScreen("result");
+    } catch (err) {
+      console.error("Analysis error:", err);
       setScreen("search");
       alert("Failed to analyze account. Please try again.");
     }
@@ -307,13 +357,16 @@ export default function App() {
       <div className="hidden lg:block w-full">
         <AnimatePresence mode="wait">
           {screen === "search" && (
-            <SearchScreen key="search" onSearch={handleSearch} />
+            <SearchScreen 
+              key="search" 
+              onSearch={handleSearch} 
+            />
           )}
           {screen === "loading" && (
             <LoadingScreen key="loading" />
           )}
           {screen === "result" && (
-            <ResultScreen key="result" data={analysisData} />
+            <ResultScreen key="result" data={analysisData} trends={trends} />
           )}
         </AnimatePresence>
       </div>

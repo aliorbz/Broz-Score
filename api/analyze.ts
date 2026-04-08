@@ -17,31 +17,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let rapidApiUsed = false;
     let rapidApiSuccess = false;
     let rapidApiError: string | null = null;
+    let rapidApiDebug: any = {};
+
+    let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+    let followersSource: "scraped" | "fallback" = "fallback";
+    let avatarSource: "scraped" | "fallback" = "fallback";
+    let followerCountUsed = 0;
 
     if (process.env.RAPIDAPI_KEY) {
       rapidApiUsed = true;
       try {
-        const tweets = await fetchTweetsFromRapidAPI(username);
-        if (tweets && tweets.length > 0) {
-          tweetsToAnalyze = tweets;
+        const result = await fetchTweetsFromRapidAPI(username);
+        // Always merge debug info if we got a result object
+        rapidApiDebug = result.debug;
+        
+        // Retain profile data if lookup succeeded, even if tweets failed
+        if (result.debug.userLookupSuccess && result.user) {
+          if (result.user.avatarUrl) {
+            finalAvatarUrl = result.user.avatarUrl;
+            avatarSource = "scraped";
+          }
+          
+          if (result.user.followersCount !== undefined) {
+            followersSource = "scraped";
+            followerCountUsed = result.user.followersCount;
+          }
+        }
+
+        if (result.tweets.length > 0) {
+          tweetsToAnalyze = result.tweets;
           rapidApiSuccess = true;
         } else {
-          rapidApiError = "No tweets returned from RapidAPI";
+          rapidApiError = result.debug.rapidApiError || "No tweets returned from RapidAPI";
         }
       } catch (err) {
         rapidApiError = err instanceof Error ? err.message : String(err);
       }
     }
 
-    let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
-    let dataSource: "real" | "mock" = "mock";
+    let dataSource: "real" | "cache" | "mock" = "mock";
     let scrapedTweetCount = 0;
-    let followersSource: "scraped" | "fallback" = "fallback";
-    let avatarSource: "scraped" | "fallback" = "fallback";
 
     if (tweetsToAnalyze && tweetsToAnalyze.length > 0) {
       scrapedTweetCount = tweetsToAnalyze.length;
-      dataSource = "real";
+      dataSource = rapidApiDebug.dataSource || "real";
     } else {
       // Fallback to mock data generation
       const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
@@ -66,6 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const avgLikes = Math.round(totalLikes / numTweets);
     const avgReplies = Math.round(totalReplies / numTweets);
+    const avgReposts = Math.round(totalReposts / numTweets);
     const totalEngagement = totalLikes + totalReplies + totalReposts;
     const engagementRate = parseFloat(((totalEngagement / numTweets) / 5).toFixed(1));
 
@@ -76,6 +96,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const activity = Math.min(100, Math.round(80 + Math.random() * 15));
 
     const score = Math.round((authenticity + value + influence + activity) / 4);
+
+    const debugStats = {
+      tweetCountUsed: numTweets,
+      followerCountUsed,
+      totalLikes,
+      totalReplies,
+      totalReposts,
+      avgLikes,
+      avgReplies,
+      avgReposts,
+      engagementRateRaw: engagementRate,
+      authenticityRaw: authenticity,
+      valueRaw: value,
+      influenceRaw: influence,
+      activityRaw: activity,
+      scoreRaw: score,
+      sampleTweets: tweetsToAnalyze.slice(0, 3).map(t => ({
+        ...t,
+        text: t.text.substring(0, 100) + (t.text.length > 100 ? "..." : "")
+      }))
+    };
+
+    console.log(`[Scoring Debug] User: ${username}`);
+    console.log(JSON.stringify(debugStats, null, 2));
 
     // Generate niche using Groq
     let niche = ["Creator", "Educator", "Analyst", "Promoter"]; // Default fallback
@@ -138,20 +182,24 @@ Return ONLY the labels separated by commas, no other text.`
       },
       niche,
       debug: {
+        inputUsername: username,
         dataSource,
         scrapedTweetCount,
         followersSource,
         avatarSource,
         profileLoaded: rapidApiSuccess,
-        avatarFound: false,
-        followersFound: false,
+        avatarFound: !!finalAvatarUrl && avatarSource === "scraped",
+        followersFound: followersSource === "scraped",
         timelineFound: rapidApiSuccess,
         loginWallDetected: false,
         scrapeFailureReason: rapidApiError || (dataSource === "mock" ? "RapidAPI failed or returned no data" : null),
         error: rapidApiError,
         groqError,
         rapidApiUsed,
-        rapidApiSuccess
+        rapidApiSuccess,
+        usedMockFallback: dataSource === "mock",
+        ...rapidApiDebug,
+        ...debugStats
       }
     };
 
