@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
 import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import logo from "./media/logo.svg";
 
 // --- Types ---
 
@@ -147,7 +146,7 @@ const LoadingScreen: FC = () => (
   >
     <div className="w-[66px] h-[66px] animate-spin-pause rounded-lg overflow-hidden">
       <img 
-        src={logo} 
+        src="/media/logo.svg" 
         alt="Loading..." 
         className="w-full h-full object-cover" 
       />
@@ -189,7 +188,7 @@ const ResultScreen: FC<{
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center">
           <div className="relative w-[251px] h-[251px] rounded-full overflow-hidden shadow-[0_0_21px_10px_rgba(217,217,217,0.6)]">
             <img 
-              src={data.profile.avatar_url || logo} 
+              src={data.profile.avatar_url || "/media/logo.svg"} 
               alt="Profile" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
