@@ -106,31 +106,31 @@ const SearchScreen: FC<{ onSearch: (username: string) => void }> = ({ onSearch }
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex flex-col items-center justify-center h-screen gap-8"
+      className="flex flex-col items-center justify-center h-screen relative"
     >
       <form 
         onSubmit={handleSubmit}
         className="relative w-full max-w-2xl group"
       >
         <div className="absolute left-6 top-1/2 -translate-y-1/2 text-bg/60">
-          <AtSign size={32} />
+          <AtSign size={24} />
         </div>
         <input
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="username..."
-          className="w-full bg-red h-24 rounded-full px-20 text-3xl font-condensed text-bg placeholder:text-bg/40 outline-none transition-all focus:ring-4 focus:ring-red/20"
+          className="w-full bg-red h-16 rounded-full px-16 text-2xl font-condensed text-bg placeholder:text-bg/40 outline-none transition-all focus:ring-4 focus:ring-red/20"
           autoFocus
         />
         <button 
           type="submit"
           className="absolute right-6 top-1/2 -translate-y-1/2 text-bg hover:scale-110 transition-transform cursor-pointer"
         >
-          <Search size={40} strokeWidth={2.5} />
+          <Search size={32} strokeWidth={2.5} />
         </button>
       </form>
-      <p className="text-off-white/60 text-2xl font-condensed tracking-wider">
+      <p className="absolute bottom-12 text-off-white/60 text-2xl font-condensed tracking-wider">
         type your x username...
       </p>
     </motion.div>
@@ -142,11 +142,18 @@ const LoadingScreen: FC = () => (
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className="flex items-center justify-center h-screen"
+    className="flex flex-col items-center justify-center h-screen relative"
   >
-    <div className="w-48 h-48 animate-pulse-logo">
-      <img src="/media/logo.svg" alt="Loading..." className="w-full h-full" />
+    <div className="w-[66px] h-[66px] animate-spin-pause rounded-lg overflow-hidden">
+      <img 
+        src="/media/logo.svg" 
+        alt="Loading..." 
+        className="w-full h-full object-cover" 
+      />
     </div>
+    <p className="absolute bottom-12 text-off-white/60 text-2xl font-condensed tracking-wider animate-dots">
+      Analyzing
+    </p>
   </motion.div>
 );
 
