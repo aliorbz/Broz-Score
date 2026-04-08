@@ -16,7 +16,7 @@
 }
 
 .card-shape {
-  background-image: url('./media/Subtract.svg');
+  background-image: url('/Subtract.svg');
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
