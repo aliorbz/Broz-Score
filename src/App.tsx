@@ -49,21 +49,33 @@ const formatNumber = (num: number) => {
 
 const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label, index }) => {
   const [mousePos, setMousePos] = useState(50);
+  const [showIndicator, setShowIndicator] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseMove = (e: MouseEvent) => {
+  const updatePosition = (clientX: number) => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const percentage = (x / rect.width) * 100;
+      const x = clientX - rect.left;
+      const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
       setMousePos(percentage);
     }
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    updatePosition(e.clientX);
+  };
+
+  const handleClick = (e: MouseEvent) => {
+    updatePosition(e.clientX);
+    setShowIndicator(!showIndicator);
   };
 
   return (
     <div 
       ref={containerRef}
       onMouseMove={handleMouseMove}
+      onClick={handleClick}
+      onMouseLeave={() => setShowIndicator(false)}
       className="group relative cursor-pointer"
     >
       <div className="w-full h-6 bg-off-white rounded-full overflow-hidden">
@@ -76,7 +88,7 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
       </div>
       <div 
         style={{ left: `${mousePos}%` }}
-        className="absolute -top-12 -translate-x-1/2 bg-bg text-off-white px-4 py-1.5 rounded-lg text-xl font-condensed opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-40 shadow-xl"
+        className={`absolute -top-12 -translate-x-1/2 bg-bg text-off-white px-4 py-1.5 rounded-lg text-xl font-condensed transition-opacity pointer-events-none whitespace-nowrap z-40 shadow-xl ${showIndicator ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
       >
         {label}
       </div>
