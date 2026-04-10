@@ -222,7 +222,7 @@ const ResultScreen: FC<{
             <div className="flex items-center gap-6">
               <Heart size={36} className="text-bg shrink-0" />
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_likes}</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_likes.toFixed(2)}</span>
                 <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
               {getTrendIcon(trends?.likes || 'neutral')}
@@ -230,7 +230,7 @@ const ResultScreen: FC<{
             <div className="flex items-center gap-6">
               <MessageCircle size={36} className="text-bg shrink-0" />
               <div className="flex items-baseline gap-1.5 ml-4">
-                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_comments}</span>
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_comments.toFixed(2)}</span>
                 <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
               {getTrendIcon(trends?.comments || 'neutral')}
@@ -251,12 +251,7 @@ const ResultScreen: FC<{
         <div className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full"></div>
           <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
-            <div className="flex items-baseline gap-4">
-              <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.score.total}</span>
-              <div className="flex flex-col">
-                <span className="text-4xl font-condensed font-bold text-bg">/100</span>
-              </div>
-            </div>
+            <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.score.total}</span>
           </div>
         </div>
 
