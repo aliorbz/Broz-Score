@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
-import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft } from "lucide-react";
+import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { LOGO_BASE64 } from "./constants";
+import { analyzeTwitterUser, TwitterScoreResult } from "./services/twitterScore";
 
 // --- Types ---
 
@@ -96,7 +97,7 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
   );
 };
 
-const SearchScreen: FC<{ onSearch: (username: string) => void }> = ({ onSearch }) => {
+const SearchScreen: FC<{ onSearch: (username: string) => void; error: string | null }> = ({ onSearch, error }) => {
   const [username, setUsername] = useState("");
 
   const handleSubmit = (e?: FormEvent) => {
@@ -135,6 +136,18 @@ const SearchScreen: FC<{ onSearch: (username: string) => void }> = ({ onSearch }
           <Search size={32} strokeWidth={2.5} />
         </button>
       </form>
+      
+      {error && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-[65%] flex items-center gap-2 text-red-500 font-condensed text-xl bg-bg/80 px-4 py-2 rounded-lg border border-red-500/30"
+        >
+          <AlertCircle size={20} />
+          {error}
+        </motion.div>
+      )}
+
       <p className="absolute bottom-12 text-off-white/60 text-2xl font-condensed tracking-wider">
         type your x username...
       </p>
@@ -163,7 +176,7 @@ const LoadingScreen: FC = () => (
 );
 
 const ResultScreen: FC<{ 
-  data: AnalysisData | null;
+  data: TwitterScoreResult | null;
   trends: {
     likes: 'up' | 'down' | 'neutral';
     comments: 'up' | 'down' | 'neutral';
@@ -251,7 +264,7 @@ const ResultScreen: FC<{
         <div className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full"></div>
           <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
-            <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.score.total}</span>
+            <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.card2_score}</span>
           </div>
         </div>
 
@@ -260,10 +273,10 @@ const ResultScreen: FC<{
           <div className="card-shape w-full h-full scale-x-[-1] scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-8 pr-42 flex flex-col justify-center gap-6">
             {[
-              { val: data.score.breakdown.authenticity, label: "Authenticity" },
-              { val: data.score.breakdown.value, label: "Value" },
-              { val: data.score.breakdown.influence, label: "Influence" },
-              { val: data.score.breakdown.activity, label: "Activity" }
+              { val: data.breakdown.authenticity, label: "Authenticity" },
+              { val: data.breakdown.value, label: "Value" },
+              { val: data.breakdown.influence, label: "Influence" },
+              { val: data.breakdown.activity, label: "Activity" }
             ].map((bar, i) => (
               <Bar key={i} width={`${(bar.val / 25) * 100}%`} label={bar.label} index={i} />
             ))}
@@ -291,7 +304,8 @@ const ResultScreen: FC<{
 
 export default function App() {
   const [screen, setScreen] = useState<"search" | "loading" | "result">("search");
-  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [analysisData, setAnalysisData] = useState<TwitterScoreResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [trends, setTrends] = useState<{
     likes: 'up' | 'down' | 'neutral';
     comments: 'up' | 'down' | 'neutral';
@@ -325,21 +339,11 @@ export default function App() {
   };
 
   const handleSearch = async (input: string) => {
-    const username = cleanUsername(input);
-    if (!username) return;
-
-    setAnalysisData(null);
+    setError(null);
     setScreen("loading");
 
     try {
-      const baseUrl = "https://750b83d6-882c-457a-a53e-3efb317fce41-00-xbx811ydhsvz.riker.replit.dev/api";
-      const response = await fetch(`${baseUrl}/score/${encodeURIComponent(username)}`);
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch analysis");
-      }
-
-      const data: AnalysisData = await response.json();
+      const result = await analyzeTwitterUser(input);
       
       // Calculate trends
       const prevDataStr = localStorage.getItem("previous_twitter_score");
@@ -347,28 +351,38 @@ export default function App() {
 
       if (prevData) {
         setTrends({
-          likes: data.engagement.average_likes > prevData.average_likes ? 'up' : data.engagement.average_likes < prevData.average_likes ? 'down' : 'neutral',
-          comments: data.engagement.average_comments > prevData.average_comments ? 'up' : data.engagement.average_comments < prevData.average_comments ? 'down' : 'neutral',
-          rate: data.engagement.engagement_rate > prevData.engagement_rate ? 'up' : data.engagement.engagement_rate < prevData.engagement_rate ? 'down' : 'neutral',
+          likes: result.engagement.average_likes > prevData.average_likes ? 'up' : result.engagement.average_likes < prevData.average_likes ? 'down' : 'neutral',
+          comments: result.engagement.average_comments > prevData.average_comments ? 'up' : result.engagement.average_comments < prevData.average_comments ? 'down' : 'neutral',
+          rate: result.engagement.engagement_rate > prevData.engagement_rate ? 'up' : result.engagement.engagement_rate < prevData.engagement_rate ? 'down' : 'neutral',
         });
       } else {
         setTrends({ likes: 'neutral', comments: 'neutral', rate: 'neutral' });
       }
 
-      // Save to localStorage
+      // Save to localStorage for trend calculation
       localStorage.setItem("previous_twitter_score", JSON.stringify({
-        username: data.username,
-        average_likes: data.engagement.average_likes,
-        average_comments: data.engagement.average_comments,
-        engagement_rate: data.engagement.engagement_rate
+        username: result.username,
+        average_likes: result.engagement.average_likes,
+        average_comments: result.engagement.average_comments,
+        engagement_rate: result.engagement.engagement_rate
       }));
 
-      setAnalysisData(data);
+      setAnalysisData(result);
       setScreen("result");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Analysis error:", err);
       setScreen("search");
-      alert("Failed to analyze account. Please try again.");
+      
+      let message = "Something went wrong, please try again";
+      if (err.message === "INVALID_USERNAME") message = "That doesn't look like a valid username";
+      if (err.message === "RATE_LIMITED") message = "You're searching too fast — wait a minute";
+      if (err.message === "API_RATE_LIMITED") message = "RapidAPI rate limit reached. Check your plan on RapidAPI.";
+      if (err.message === "USER_NOT_FOUND") message = "Account not found, private, or suspended";
+      if (err.message === "FETCH_FAILED") message = "Could not reach Twitter right now, try again soon";
+      if (err.message === "API_FORBIDDEN") message = "API Key invalid or not subscribed to Twitter135 on RapidAPI";
+      if (err.message === "CORS_ERROR") message = "Browser blocked the request. This API might not support client-side calls.";
+      
+      setError(message);
     }
   };
 
@@ -391,6 +405,7 @@ export default function App() {
             <SearchScreen 
               key="search" 
               onSearch={handleSearch} 
+              error={error}
             />
           )}
           {screen === "loading" && (
