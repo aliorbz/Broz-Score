@@ -287,7 +287,15 @@ export default async function handler(
   res.setHeader("Access-Control-Allow-Methods", "GET")
 
   try {
-    const raw = req.query.username as string
+    const raw = (
+      req.query.username ?? 
+      req.url?.split("/").pop()?.split("?")[0] ?? 
+      ""
+    ) as string
+
+    console.log("Raw username from query:", req.query)
+    console.log("Full request URL:", req.url)
+    console.log("Extracted username:", raw)
     const username = cleanUsername(raw || "")
 
     if (!validateUsername(username)) {
