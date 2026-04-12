@@ -1,4 +1,7 @@
 {
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "framework": "vite",
   "functions": {
     "api/score/[username].ts": {
       "memory": 1024,
@@ -7,8 +10,12 @@
   },
   "rewrites": [
     {
-      "source": "/api/score/:username",
+      "source": "/api/score/(.*)",
       "destination": "/api/score/[username]"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
