@@ -102,17 +102,29 @@ function safeGet(obj: any, ...paths: string[]): any {
 // --- RapidAPI Calls ---
 
 async function fetchProfile(username: string): Promise<any> {
-  const response = await fetch(
-    `https://twitter135.p.rapidapi.com/v2/UserByScreenName/?username=${username}`,
-    {
-      headers: {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "twitter135.p.rapidapi.com"
-      }
+  const url = `https://twitter135.p.rapidapi.com/v2/UserByScreenName/?username=${username}`
+  
+  console.log("Calling RapidAPI URL:", url)
+  console.log("API Key exists:", !!RAPIDAPI_KEY)
+  console.log("API Key first 6 chars:", RAPIDAPI_KEY?.slice(0, 6))
+  
+  const response = await fetch(url, {
+    headers: {
+      "x-rapidapi-key": RAPIDAPI_KEY,
+      "x-rapidapi-host": "twitter135.p.rapidapi.com"
     }
-  )
-  if (!response.ok) throw new Error("USER_NOT_FOUND")
-  return response.json()
+  })
+  
+  console.log("RapidAPI status:", response.status)
+  
+  const text = await response.text()
+  console.log("RapidAPI raw response:", text.slice(0, 500))
+  
+  if (!response.ok) {
+    throw new Error(`RAPIDAPI_ERROR: ${response.status} - ${text.slice(0, 200)}`)
+  }
+  
+  return JSON.parse(text)
 }
 
 async function fetchTweets(userId: string): Promise<any> {
