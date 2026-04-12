@@ -1,8 +1,14 @@
 {
+  "functions": {
+    "api/score/[username].ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/api/analyze",
-      "destination": "/api/analyze.ts"
+      "source": "/api/score/:username",
+      "destination": "/api/score/[username]"
     }
   ]
 }
