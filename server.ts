@@ -9,8 +9,6 @@ import { LRUCache } from "lru-cache";
 
 dotenv.config();
 
-
-
 // Global LRU Cache Instance - Max 500 users, 24-Hour TTL
 const profileCache = new LRUCache<string, any>({
   max: 500,
@@ -33,244 +31,165 @@ async function startServer() {
   app.use(helmet({
     contentSecurityPolicy: false, 
     crossOriginEmbedderPolicy: false
-  })); // CSP disabled to support Vite dev middleware inline scripts securely
+  }));
 
   app.use(cors({
-    origin: process.env.NODE_ENV === "production" ? process.env.CLIENT_URL || "*" : "*",
+    origin: "*",
     methods: ["GET"]
   }));
 
-  // Scoring Formulas (Log Scales)
-  function followersLogScale(followers: number): number {
+  // Normalized Scoring Model Components
+  function calculateFollowerComponent(followers: number): number {
     if (followers <= 0) return 0;
-    const rawLog = Math.log10(followers + 1);
-    const score = Math.pow(rawLog, 3.2) * 2.1;
-    return Math.min(4000, Math.round(score * 100) / 100);
+    const log = Math.log10(followers);
+    const score = (log / 8) * 40; // 100M = 40pts
+    return Math.min(40, Math.max(2, score));
   }
 
-  function postLogScale(count: number): number {
+  function calculatePostComponent(count: number): number {
     if (count <= 0) return 0;
-    const rawLog = Math.log10(count + 1);
-    const score = Math.pow(rawLog, 2.8) * 1.2;
-    return Math.min(50, Math.round(score * 100) / 100);
+    const log = Math.log10(count);
+    const score = (log / 5) * 15; // 100k = 15pts
+    return Math.min(15, Math.max(1, score));
   }
 
-  function ageLogScale(ageDays: number): number {
-    if (ageDays <= 0) return 0;
-    const rawLog = Math.log10(ageDays + 1);
-    const score = Math.pow(rawLog, 2.5) * 5.5;
-    return Math.min(100, Math.round(score * 100) / 100);
+  function calculateAgeComponent(joinedDate: string): { score: number, days: number } {
+    try {
+      let date = new Date(joinedDate);
+      if (isNaN(date.getTime())) {
+        const yearMatch = joinedDate.match(/\d{4}/);
+        const year = yearMatch ? parseInt(yearMatch[0]) : 2022;
+        date = new Date(`${year}-01-01`);
+      }
+      const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+      const ageYears = days / 365;
+      const score = Math.min(15, Math.max(1, (ageYears / 15) * 15));
+      return { score, days: Math.max(1, days) };
+    } catch (e) { return { score: 5, days: 365 }; }
   }
 
-  // API Routes
+  function calculateEngagementComponent(rate: number): number {
+    if (rate <= 0) return 2;
+    const score = Math.max(0, Math.log10(rate * 100 + 1) * 12); // ~5% = 30pts
+    return Math.min(30, score);
+  }
+
+  // API Fetch with Grounding
+  async function fetchWithRetry(username: string, retries = 1, delay = 2000) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `Search for the real Twitter profile @${username}. Return EXACT: followers, following, posts, bio, location, displayName, joined, verified status. Also analyze for metrics: likes, replies (averages), niches (3-5), and content quality (1-10). Return ONLY JSON: {"followers": number, "following": number, "posts": number, "bio": "string", "location": "string", "displayName": "string", "joined": "string", "verified": boolean, "metrics": {"likes": number, "replies": number}, "niches": ["tag1", "tag2"], "analysis": {"quality": number, "reasoning": "string"}}`
+            }]
+          }],
+          tools: [{ googleSearch: {} }]
+        })
+      });
+
+      if (response.status === 429 && retries > 0) {
+        await new Promise(r => setTimeout(r, delay));
+        return fetchWithRetry(username, retries - 1, delay * 2);
+      }
+      return response;
+    } catch (e) { throw e; }
+  }
+
   app.get("/api/analyze", async (req, res) => {
     try {
       const parsedQuery = AnalyzeQuerySchema.safeParse(req.query);
-      if (!parsedQuery.success) {
-        return res.status(400).json({ error: true, code: "INVALID_INPUT", message: parsedQuery.error.errors[0].message });
-      }
+      if (!parsedQuery.success) return res.status(400).json({ error: true, message: "Invalid input" });
       
       const { username } = parsedQuery.data;
-      const cachedData = profileCache.get(username.toLowerCase());
-      if (cachedData) return res.json({ ...cachedData, from_cache: true });
+      const cached = profileCache.get(username.toLowerCase());
+      if (cached) return res.json({ ...cached, from_cache: true });
 
-      // Default variables (Sandbox Fallback)
-      let finalAvatarUrl = `https://unavatar.io/x/${username}`;
-      let displayName = username;
-      let bio = "An enigmatic digital presence.";
-      let location = "The Internet";
-      let followers = Math.floor(Math.random() * 5000);
-      let following = Math.floor(Math.random() * 500);
-      let tweetCount = Math.floor(Math.random() * 1000);
-      let joinedDate = "January 2023";
-      let verified = false;
+      let followers = 0, following = 0, tweetCount = 0, verified = false;
+      let displayName = username, bio = "", location = "", joinedDate = "2023-01-01";
+      let avgLikes = 0, avgReplies = 0, engagementRate = 1.0, quality = 5, reasoning = "", niches = ["Digital"];
 
-      let avgLikes = 0;
-      let avgReplies = 0;
-      let engagementRate = 0.5;
-      let niches: string[] = ["Creator", "Explorer", "Digital"];
-      let scoreReasoning = "This profile shows consistent digital activity.";
-      let contentQuality = 5;
-
-      // API Grounding with Exponential Backoff / Retry
-      async function fetchWithRetry(username: string, retries = 1, delay = 2000) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `Search explicitly for the real, current Twitter/X profile @${username}. 
-                  You must find and return the latest:
-                  - Exact Follower count
-                  - Exact Following count
-                  - Bio
-                  - Location
-                  - Display Name
-                  - Joined Date
-                  - Verified status
-                  - Total Tweet/Post Count
-                  
-                  Also, analyze recent activity for:
-                  - Average likes per tweet
-                  - 3-5 specific interest niches
-                  - Aura summary (one sentence)
-                  
-                  Return ONLY a JSON object: 
-                  {"followers": number, "following": number, "posts": number, "bio": "string", "location": "string", "displayName": "string", "joined": "string", "verified": boolean, "metrics": {"likes": number, "replies": number}, "niches": ["tag1", "tag2", "tag3"], "analysis": {"quality": number, "reasoning": "string"}}`
-                }]
-              }],
-              tools: [{ googleSearch: {} }]
-            })
-          });
-
-          if (response.status === 429 && retries > 0) {
-            console.log(`Rate limited. Retrying in ${delay}ms...`);
-            await new Promise(r => setTimeout(r, delay));
-            return fetchWithRetry(username, retries - 1, delay * 2);
-          }
-          return response;
-        } catch (e) {
-          console.error("Fetch implementation error:", e);
-          throw e;
-        }
-      }
-
-      // Gemini Search Grounding & Analysis
       if (process.env.GEMINI_API_KEY) {
         try {
-          const geminiResponse = await fetchWithRetry(username);
-          
-          if (geminiResponse.ok) {
-            const result = await geminiResponse.json();
-            const textContent = result.candidates?.[0]?.content?.parts?.[0]?.text;
-            
-            if (textContent) {
-              console.log(`[Gemini Raw Output for @${username}]:`, textContent);
-              
-              // Robust JSON Extraction
-              let cleanJson = textContent;
-              const jsonMatch = textContent.match(/\{[\s\S]*\}/); // Regex to find the first JSON object
-              if (jsonMatch) cleanJson = jsonMatch[0];
-              
-              try {
-                const parsed = JSON.parse(cleanJson);
-                console.log(`[Parsed Stats for @${username}]:`, { followers: parsed.followers, posts: parsed.posts });
-                
-                followers = parsed.followers ?? followers;
-                following = parsed.following ?? following;
-                tweetCount = parsed.posts ?? tweetCount;
-                bio = parsed.bio ?? bio;
-                location = parsed.location ?? location;
-                displayName = parsed.displayName ?? displayName;
-                joinedDate = parsed.joined ?? joinedDate;
-                verified = !!parsed.verified;
-                
-                if (parsed.metrics) {
-                  avgLikes = parsed.metrics.likes || 10;
-                  avgReplies = parsed.metrics.replies || 2;
-                  const totalEng = avgLikes + avgReplies;
-                  engagementRate = followers > 0 ? parseFloat(((totalEng / followers) * 100).toFixed(2)) : 0.5;
-                }
-                
-                if (parsed.niches) niches = parsed.niches.slice(0, 5);
-                if (parsed.analysis) {
-                  contentQuality = parsed.analysis.quality || 5;
-                  scoreReasoning = parsed.analysis.reasoning || scoreReasoning;
-                }
-              } catch (e) { 
-                console.error("JSON Parse Error for @${username}. Raw content was:", cleanJson); 
+          const geminiRes = await fetchWithRetry(username);
+          if (geminiRes.ok) {
+            const result = await geminiRes.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              const data = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+              followers = Number(data.followers) || 0;
+              following = Number(data.following) || 0;
+              tweetCount = Number(data.posts) || 0;
+              verified = !!data.verified;
+              displayName = data.displayName || username;
+              bio = data.bio || "";
+              location = data.location || "";
+              joinedDate = data.joined || "2023-01-01";
+              if (data.metrics) {
+                avgLikes = Number(data.metrics.likes) || 0;
+                avgReplies = Number(data.metrics.replies) || 0;
+                engagementRate = followers > 0 ? ((avgLikes + avgReplies) / followers) * 100 : 1.0;
+              }
+              if (data.niches) niches = data.niches.slice(0, 5);
+              if (data.analysis) {
+                quality = data.analysis.quality || 5;
+                reasoning = data.analysis.reasoning || "";
               }
             }
-          } else if (geminiResponse.status === 429) {
-            return res.status(429).json({ error: true, code: "RATE_LIMITED", message: "Intelligence engines are cooling down. Please wait a minute." });
+          } else if (geminiRes.status === 429) {
+            return res.status(429).json({ error: true, message: "Engines cooling down..." });
           }
-        } catch (error) { console.error("Gemini Error:", error); }
+        } catch (e) { console.error("Gemini failed"); }
       }
 
-      // Calculate Scores
-      const ageDays = Math.max(1, Math.floor((Date.now() - new Date(joinedDate).getTime()) / (1000 * 60 * 60 * 24)));
-      const ageScore = ageLogScale(ageDays);
-      const followerScore = followersLogScale(followers);
-      const postScore = postLogScale(tweetCount);
+      const reach = calculateFollowerComponent(followers);
+      const activityScore = calculatePostComponent(tweetCount);
+      const { score: ageScore, days: ageDays } = calculateAgeComponent(joinedDate);
+      const impact = calculateEngagementComponent(engagementRate);
       
+      let total = reach + activityScore + ageScore + impact;
+      if (verified) total += 5;
+      const finalScore = Math.min(100, Math.max(1, Math.round(total)));
       const ratio = following > 0 ? followers / following : followers;
-      let ratioScore = ratio < 0.5 ? 5 : ratio < 1 ? 15 : ratio < 3 ? 30 : ratio < 10 ? 40 : 50;
 
-      let rawTotal = 50 + followerScore + ratioScore + postScore + ageScore;
-      if (verified) rawTotal *= 1.05;
-      const totalScore = Math.min(9999, Math.max(0, Math.round(rawTotal)));
+      // Breakdown calculations
+      const authenticity = Math.min(25, 10 + (verified ? 10 : 0) + (bio ? 5 : 0));
+      const value = Math.min(25, 5 + quality * 2);
+      const influence = Math.min(25, (reach / 40) * 25);
+      const activity = Math.min(25, (activityScore / 15) * 10 + (ageScore / 15) * 15);
 
-      // Detailed Breakdown (0-25 per category)
-      let authenticity = 5;
-      if (!finalAvatarUrl.includes("default")) authenticity += 5;
-      if (bio.length > 5) authenticity += 5;
-      if (ageDays > 365) authenticity += 5;
-      if (!/\d/.test(username)) authenticity += 5;
-
-      const value = Math.min(25, 10 + contentQuality * 1.5);
-      
-      let influence = (followers >= 1000 ? 10 : followers >= 100 ? 5 : 2) + 
-                      (ratio > 3 ? 5 : ratio > 1 ? 3 : 1) + 
-                      (verified ? 10 : 0);
-      influence = Math.min(25, influence);
-
-      const activity = Math.min(25, 10 + (tweetCount / Math.max(ageDays, 1)) * 5);
-
-      const responseData = {
+      const response = {
         username,
-        profile: { 
-          display_name: displayName || username, 
-          bio: bio || "", 
-          location: location || "", 
-          avatar_url: finalAvatarUrl, 
-          followers: Number(followers) || 0, 
-          following: Number(following) || 0, 
-          tweet_count: Number(tweetCount) || 0, 
-          joined: joinedDate || "", 
-          verified 
-        },
-        engagement: { 
-          average_likes: Number(avgLikes) || 0, 
-          average_comments: Number(avgReplies) || 0, 
-          engagement_rate: Number(engagementRate) || 0 
-        },
-        card2_score: totalScore || 0,
+        profile: { display_name: displayName, bio, location, avatar_url: `https://unavatar.io/x/${username}`, followers, following, tweet_count: tweetCount, joined: joinedDate, verified },
+        engagement: { average_likes: avgLikes, average_comments: avgReplies, engagement_rate: engagementRate },
+        card2_score: finalScore,
         breakdown: { authenticity, value, influence, activity },
-        niches: niches || [],
-        score_reasoning: scoreReasoning || "",
+        niches,
+        score_reasoning: reasoning,
         from_cache: false,
         scored_at: new Date().toISOString()
       };
 
-      profileCache.set(username.toLowerCase(), responseData);
-      return res.json(responseData);
-
-    } catch (topLevelError) {
-      console.error("[Fatal API Error]", topLevelError);
-      return res.status(500).json({ error: true, code: "INTERNAL_SERVER_ERROR", message: "An anomaly occurred during analysis." });
+      profileCache.set(username.toLowerCase(), response);
+      return res.json(response);
+    } catch (e) {
+      return res.status(500).json({ error: true, message: "Anomaly detected" });
     }
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    const dist = path.join(process.cwd(), 'dist');
+    app.use(express.static(dist));
+    app.get('*', (req, res) => res.sendFile(path.join(dist, 'index.html')));
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server strictly enforcing domain logic on port: ${PORT}`);
-  });
+  app.listen(PORT, "0.0.0.0", () => console.log(`Server on :${PORT}`));
 }
 
 startServer();

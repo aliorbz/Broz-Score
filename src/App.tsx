@@ -31,6 +31,17 @@ const formatNumber = (num: any) => {
   return Math.round(num).toString();
 };
 
+const getAuraGrade = (score: number) => {
+  if (score >= 95) return "S+";
+  if (score >= 90) return "S";
+  if (score >= 80) return "A+";
+  if (score >= 70) return "A";
+  if (score >= 60) return "B+";
+  if (score >= 50) return "B";
+  if (score >= 40) return "C";
+  return "D";
+};
+
 // --- Components ---
 
 const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label, index }) => {
@@ -68,7 +79,7 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width }}
-          transition={{ duration: 1, delay: 0.5 + index * 0.1 }}
+          transition={{ duration: 1.2, delay: 0.5 + index * 0.1, ease: "circOut" }}
           className="h-full bg-bg rounded-full group-hover:opacity-80 transition-opacity"
         />
       </div>
@@ -348,10 +359,14 @@ const ResultScreen: FC<{
           className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden"
         >
           <div className="card-shape w-full h-full"></div>
-          <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
-            <span className="inline-block text-[160px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">
-              <AnimatedNumber value={data.card2_score} format={(v) => Math.round(v).toString()} />
-            </span>
+          <div className="absolute inset-0 pl-42 pr-8 flex flex-col items-center justify-center -gap-2">
+            <span className="text-3xl font-condensed font-bold text-bg/40 tracking-widest uppercase mb-[-10px]">Aura Rank</span>
+            <div className="flex items-baseline gap-2">
+              <span className="inline-block text-[150px] font-condensed font-black text-bg leading-none tracking-tighter scale-y-110">
+                <AnimatedNumber value={data.card2_score} format={(v) => Math.round(v).toString()} />
+              </span>
+              <span className="text-6xl font-condensed font-black text-bg opacity-50 mb-4">{getAuraGrade(data.card2_score)}</span>
+            </div>
           </div>
         </motion.div>
 
