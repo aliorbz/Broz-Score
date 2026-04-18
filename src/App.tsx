@@ -96,12 +96,13 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
 const SearchScreen: FC<{ 
   onSearch: (username: string) => void; 
   error: string | null;
-}> = ({ onSearch, error }) => {
+  isLoading: boolean;
+}> = ({ onSearch, error, isLoading }) => {
   const [username, setUsername] = useState("");
 
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault();
-    if (username.trim()) {
+    if (username.trim() && !isLoading) {
       onSearch(username);
     }
   };
@@ -113,6 +114,20 @@ const SearchScreen: FC<{
       exit={{ opacity: 0 }}
       className="flex flex-col items-center justify-center w-[1000px] h-[560px] relative"
     >
+      {/* Brand Identity Header */}
+      <motion.div 
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="mb-12 flex flex-col items-center gap-2"
+      >
+        <div className="w-[100px] h-[100px] bg-red rounded-[28px] flex items-center justify-center overflow-hidden shadow-2xl shadow-red/20 mb-2">
+          <img src="/logo512.png" alt="Aura Logo" className="w-[90%] h-[90%] object-contain scale-110" />
+        </div>
+        <h1 className="text-off-white font-condensed text-6xl tracking-[0.25em] uppercase font-black">AuraScore</h1>
+        <p className="text-off-white/40 font-condensed text-xl tracking-[0.1em] uppercase">Intelligence Engine v1.0</p>
+      </motion.div>
+
       <form 
         onSubmit={handleSubmit}
         className="relative w-[672px] group"
@@ -124,15 +139,21 @@ const SearchScreen: FC<{
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="username..."
-          className="w-full bg-red h-16 rounded-full px-16 text-2xl font-condensed text-bg placeholder:text-bg/40 outline-none transition-all focus:ring-4 focus:ring-red/20"
+          placeholder={isLoading ? "analyzing..." : "username..."}
+          disabled={isLoading}
+          className={`w-full bg-red h-16 rounded-full px-16 text-2xl font-condensed text-bg placeholder:text-bg/40 outline-none transition-all focus:ring-4 focus:ring-red/20 ${isLoading ? 'opacity-50 cursor-wait' : ''}`}
           autoFocus
         />
         <button 
           type="submit"
-          className="absolute right-6 top-1/2 -translate-y-1/2 text-bg hover:scale-110 transition-transform cursor-pointer"
+          disabled={isLoading || !username.trim()}
+          className={`absolute right-6 top-1/2 -translate-y-1/2 text-bg hover:scale-110 transition-transform cursor-pointer ${isLoading ? 'opacity-50' : ''}`}
         >
-          <Search size={32} strokeWidth={2.5} />
+          {isLoading ? (
+             <div className="w-8 h-8 border-4 border-bg/30 border-t-bg rounded-full animate-spin" />
+          ) : (
+            <Search size={32} strokeWidth={2.5} />
+          )}
         </button>
       </form>
       
@@ -161,11 +182,12 @@ const LoadingScreen: FC = () => (
     exit={{ opacity: 0 }}
     className="flex flex-col items-center justify-center w-[1000px] h-[560px] relative"
   >
-    <div className="w-[66px] h-[66px] animate-spin-pause rounded-lg overflow-hidden">
+    <div className="w-[120px] h-[120px] animate-spin-slow rounded-[32px] overflow-hidden flex items-center justify-center bg-red/10 border border-red/20 mb-8 relative">
+      <div className="absolute inset-0 bg-red/20 animate-pulse-fast rounded-full blur-3xl" />
       <img 
-        src={LOGO_BASE64} 
+        src="/logo512.png" 
         alt="Loading..." 
-        className="w-full h-full object-cover" 
+        className="w-[85%] h-[85%] object-contain relative z-10" 
       />
     </div>
     <p className="absolute bottom-12 text-off-white/60 text-2xl font-condensed tracking-wider animate-dots">
@@ -398,11 +420,18 @@ const ResultScreen: FC<{
           className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden"
         >
           <div className="card-shape w-full h-full scale-y-[-1]"></div>
-          <div className="absolute inset-0 pl-38 pr-4 py-10 flex flex-row flex-wrap content-center items-center justify-center gap-3">
+          <div className="absolute inset-0 pl-38 pr-6 py-8 flex flex-row flex-wrap content-center items-center justify-center gap-2">
             {data.niches.map((label, i) => (
-              <div key={i} className="bg-bg text-red px-5 py-2 rounded-xl text-[26px] font-condensed font-bold leading-none tracking-tight shadow-sm border border-red/20 shadow-red/5">
-                {label}
-              </div>
+              <motion.div 
+                key={i} 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.5 + i * 0.05 }}
+                className="bg-bg/90 text-red px-3 py-1 rounded-lg text-[18px] font-condensed font-bold leading-none tracking-tight shadow-sm border border-red/20 hover:border-red/40 transition-colors"
+                style={{ backdropFilter: 'blur(4px)' }}
+              >
+                #{label.replace(/^#/, '')}
+              </motion.div>
             ))}
           </div>
         </motion.div>
@@ -465,6 +494,20 @@ export default function App() {
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const handleInitialPath = async () => {
+      const path = window.location.pathname;
+      if (path.startsWith("/score/")) {
+        const userFromPath = path.replace("/score/", "").trim();
+        if (userFromPath && userFromPath.length > 0 && screen === "search") {
+          console.log("[Portal] Deep link detected:", userFromPath);
+          handleSearch(userFromPath);
+        }
+      }
+    };
+    handleInitialPath();
   }, []);
 
   const handleSearch = async (input: string) => {
@@ -540,6 +583,7 @@ export default function App() {
               key="search" 
               onSearch={handleSearch} 
               error={error}
+              isLoading={screen === "loading"}
             />
           )}
           {screen === "loading" && (

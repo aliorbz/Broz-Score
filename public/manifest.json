@@ -1,0 +1,21 @@
+{
+  "name": "AuraScore AI",
+  "short_name": "AuraScore",
+  "description": "Discover Your Digital Aura with AI grounding.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#303332",
+  "theme_color": "#FF4E46",
+  "icons": [
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
