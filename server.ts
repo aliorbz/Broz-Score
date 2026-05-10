@@ -1,241 +1,187 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import { fileURLToPath } from "url";
+import Groq from "groq-sdk";
 import dotenv from "dotenv";
-import helmet from "helmet";
-import cors from "cors";
-import { z } from "zod";
-import { LRUCache } from "lru-cache";
+import { fetchTweetsFromRapidAPI } from "./src/lib/twitterApi.js";
 
 dotenv.config();
 
-// Global LRU Cache Instance - Max 500 users, 24-Hour TTL
-const profileCache = new LRUCache<string, any>({
-  max: 500,
-  ttl: 1000 * 60 * 60 * 24, 
-});
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Zod Schema for strict input validation
-const AnalyzeQuerySchema = z.object({
-  username: z.string()
-    .min(1, "Username is required")
-    .max(20, "Username too long")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username must only contain letters, numbers, and underscores"),
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Security Middleware
-  app.use(helmet({
-    contentSecurityPolicy: false, 
-    crossOriginEmbedderPolicy: false
-  }));
-
-  app.use(cors({
-    origin: "*",
-    methods: ["GET"]
-  }));
-
-  // Normalized Scoring Model Components
-  function calculateFollowerComponent(followers: number): number {
-    if (followers <= 0) return 0;
-    const log = Math.log10(followers);
-    const score = (log / 8) * 40; // 100M = 40pts
-    return Math.min(40, Math.max(2, score));
-  }
-
-  function calculatePostComponent(count: number): number {
-    if (count <= 0) return 0;
-    const log = Math.log10(count);
-    const score = (log / 5) * 15; // 100k = 15pts
-    return Math.min(15, Math.max(1, score));
-  }
-
-  function calculateAgeComponent(joinedDate: string): { score: number, days: number } {
-    try {
-      let date = new Date(joinedDate);
-      if (isNaN(date.getTime())) {
-        const yearMatch = joinedDate.match(/\d{4}/);
-        const year = yearMatch ? parseInt(yearMatch[0]) : 2022;
-        date = new Date(`${year}-01-01`);
-      }
-      const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-      const ageYears = days / 365;
-      const score = Math.min(15, Math.max(1, (ageYears / 15) * 15));
-      return { score, days: Math.max(1, days) };
-    } catch (e) { return { score: 5, days: 365 }; }
-  }
-
-  function calculateEngagementComponent(rate: number): number {
-    if (rate <= 0) return 2;
-    const score = Math.max(0, Math.log10(rate * 100 + 1) * 12); // ~5% = 30pts
-    return Math.min(30, score);
-  }
-
-  // API Fetch with Grounding
-  async function fetchWithRetry(username: string, retries = 1, delay = 2000) {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Search for the real Twitter profile @${username}. Return EXACT: followers, following, posts, bio, location, displayName, joined, verified status. Also analyze for metrics: likes, replies (averages), niches (3-5), and content quality (1-10). Return ONLY JSON: {"followers": number, "following": number, "posts": number, "bio": "string", "location": "string", "displayName": "string", "joined": "string", "verified": boolean, "metrics": {"likes": number, "replies": number}, "niches": ["tag1", "tag2"], "analysis": {"quality": number, "reasoning": "string"}}`
-            }]
-          }],
-          tools: [{ googleSearch: {} }]
-        })
-      });
-
-      if (response.status === 429 && retries > 0) {
-        await new Promise(r => setTimeout(r, delay));
-        return fetchWithRetry(username, retries - 1, delay * 2);
-      }
-      return response;
-    } catch (e) { throw e; }
-  }
-
+  // API routes
   app.get("/api/analyze", async (req, res) => {
+    const username = (req.query.username as string) || "exampleuser";
+    
     try {
-      const parsedQuery = AnalyzeQuerySchema.safeParse(req.query);
-      if (!parsedQuery.success) return res.status(400).json({ error: true, message: "Invalid input" });
-      
-      const { username } = parsedQuery.data;
-      const cached = profileCache.get(username.toLowerCase());
-      if (cached) return res.json({ ...cached, from_cache: true });
+      let tweetsToAnalyze = null;
+      let rapidApiUsed = false;
+      let rapidApiSuccess = false;
+      let rapidApiError: string | null = null;
+      let rapidApiDebug: any = {};
 
-      let followers = 0, following = 0, tweetCount = 0, verified = false;
-      let displayName = username, bio = "", location = "", joinedDate = "2023-01-01";
-      let avgLikes = 0, avgReplies = 0, engagementRate = 1.0, quality = 5, reasoning = "", niches = ["Digital"];
+      let finalAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+      let displayName = username;
+      let bio = "No bio available";
+      let location = "Internet";
+      let followers = 0;
+      let following = 0;
+      let tweetCount = 0;
+      let joined = "January 2020";
+      let verified = false;
 
-      if (process.env.GEMINI_API_KEY) {
+      if (process.env.RAPIDAPI_KEY) {
+        rapidApiUsed = true;
         try {
-          console.log(`[Gemini] Starting grounded search for @${username}...`);
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
-          
-          const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: controller.signal,
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `Search for the verified X/Twitter profile of @${username}. 
-                  Provide the REAL and CURRENT: followers (estimated if exact unavailable), following, post count, bio, joined date, and verified status. 
-                  Also estimate: average likes/replies per post and high-level interest niches (provide at least 12-15 distinct niche tags).
-                  Return ONLY JSON in this format: {"followers": number, "following": number, "posts": number, "bio": "string", "displayName": "string", "joined": "string", "verified": boolean, "metrics": {"likes": number, "replies": number}, "niches": ["tag1", "tag2"], "analysis": {"quality": number, "reasoning": "string"}}`
-                }]
-              }],
-              tools: [{ googleSearch: {} }]
-            })
-          });
-          clearTimeout(timeoutId);
+          const result = await fetchTweetsFromRapidAPI(username);
+          rapidApiDebug = result.debug;
 
-          if (geminiRes.ok) {
-            const result = await geminiRes.json();
-            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-            
-            if (text) {
-              const jsonMatch = text.match(/\{[\s\S]*\}/);
-              try {
-                const data = JSON.parse(jsonMatch ? jsonMatch[0] : text);
-                followers = Number(data.followers) || followers;
-                following = Number(data.following) || following;
-                tweetCount = Number(data.posts) || tweetCount;
-                verified = !!data.verified;
-                displayName = data.displayName || displayName;
-                bio = data.bio || bio;
-                joinedDate = data.joined || joinedDate;
-                if (data.metrics) {
-                  avgLikes = Number(data.metrics.likes) || 0;
-                  avgReplies = Number(data.metrics.replies) || 0;
-                  engagementRate = followers > 0 ? ((avgLikes + avgReplies) / followers) * 100 : 1.0;
-                }
-                if (data.niches) niches = data.niches.slice(0, 15);
-                if (data.analysis) {
-                  quality = data.analysis.quality || 5;
-                  reasoning = data.analysis.reasoning || "";
-                }
-              } catch (parseError) {
-                console.error("[Gemini] JSON Parse failed:", text.substring(0, 100));
-              }
-            }
-          } else if (geminiRes.status === 429) {
-            console.warn("[Gemini] Rate Limited (429). Falling back to statistics...");
-          } else {
-            console.error(`[Gemini] API Error ${geminiRes.status}`);
+          if (result.debug.userLookupSuccess && result.user) {
+            if (result.user.avatarUrl) finalAvatarUrl = result.user.avatarUrl;
+            if (result.user.displayName) displayName = result.user.displayName;
+            if (result.user.followersCount !== undefined) followers = result.user.followersCount;
           }
-        } catch (e: any) {
-          if (e.name === 'AbortError') console.error("[Gemini] Fetch timed out after 25s");
-          else console.error("[Gemini] Unexpected Fetch error:", e.message);
-          // Don't throw, let it fall through to heursitics
+
+          if (result.tweets.length > 0) {
+            tweetsToAnalyze = result.tweets;
+            rapidApiSuccess = true;
+          } else {
+            rapidApiError = result.debug.rapidApiError || "No tweets returned from RapidAPI";
+          }
+        } catch (err) {
+          rapidApiError = err instanceof Error ? err.message : String(err);
         }
       }
 
-      // --- Statistical Resilience: Adaptive Heuristics ---
-      // If grounding failed (followers=0), we provide 'smart estimates' 
-      // based on typical high-profile username patterns for a better UX.
-      if (followers === 0) {
-        if (["jack", "elonmusk", "pmarca", "vitalikbuterin", "saylor", "cz_binance"].includes(username.toLowerCase())) {
-          followers = 5000000; // Multi-million fallback
-          tweetCount = 15000;
-          verified = true;
-          joinedDate = "2009-01-01";
-          niches = ["TechVisionary", "Founder", "Innovation", "VentureCapital", "AIOptimist", "FutureBuilt", "IndustryLead", "MarketDisruption", "Investor", "ScaleUp", "Strategy", "Transformation"];
-        } else if (username.length < 5) {
-          followers = 50000; // Short handles are likely legacy/popular
+      let dataSource: "real" | "cache" | "mock" = "mock";
+      if (tweetsToAnalyze && tweetsToAnalyze.length > 0) {
+        dataSource = rapidApiDebug.dataSource || "real";
+      } else {
+        const tweetTypes: ("original" | "reply" | "repost")[] = ["original", "reply", "repost"];
+        tweetsToAnalyze = Array.from({ length: 20 }).map((_, i) => {
+          const type = tweetTypes[Math.floor(Math.random() * tweetTypes.length)];
+          return {
+            text: `Mock tweet ${i} content for ${username}. Discussing tech, AI, and productivity.`,
+            likes: Math.floor(Math.random() * 100),
+            replies: Math.floor(Math.random() * 50),
+            reposts: Math.floor(Math.random() * 30),
+            type,
+            createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString()
+          };
+        });
+      }
+
+      const totalLikes = tweetsToAnalyze.reduce((sum, t) => sum + t.likes, 0);
+      const totalReplies = tweetsToAnalyze.reduce((sum, t) => sum + t.replies, 0);
+      const totalReposts = tweetsToAnalyze.reduce((sum, t) => sum + t.reposts, 0);
+      const numTweets = tweetsToAnalyze.length;
+
+      const avgLikes = Math.round(totalLikes / numTweets);
+      const avgReplies = Math.round(totalReplies / numTweets);
+      const totalEngagement = totalLikes + totalReplies + totalReposts;
+      const engagementRate = parseFloat(((totalEngagement / numTweets) / 5).toFixed(1));
+
+      const originalTweets = tweetsToAnalyze.filter(t => t.type === "original").length;
+      const authenticity = Math.min(100, Math.round((originalTweets / numTweets) * 100 + 20));
+      const value = Math.min(100, Math.round((totalReposts / numTweets) * 3 + 40));
+      const influence = Math.min(100, Math.round((totalEngagement / 100) + 30));
+      const activity = Math.min(100, Math.round(80 + Math.random() * 15));
+
+      const scoreTotal = Math.round((authenticity + value + influence + activity) / 4);
+
+      let niche = ["Creator", "Educator", "Analyst", "Promoter"];
+      if (process.env.GROQ_API_KEY) {
+        try {
+          const tweetTexts = tweetsToAnalyze.map(t => t.text).join("\n");
+          const completion = await groq.chat.completions.create({
+            messages: [
+              {
+                role: "system",
+                content: `You are a social media analyst. Based ONLY on the provided tweet texts, return 4 or 5 one-word labels that describe the user's niche or profile type. Return ONLY the labels separated by commas.`
+              },
+              {
+                role: "user",
+                content: `Analyze these tweets for user ${username}:\n\n${tweetTexts}`
+              }
+            ],
+            model: "llama-3.3-70b-versatile",
+          });
+
+          const responseText = completion.choices[0]?.message?.content;
+          if (responseText) {
+            const labels = responseText.split(",").map(s => s.trim().replace(/[.]/g, "")).filter(s => s.length > 0);
+            if (labels.length >= 3) niche = labels.slice(0, 5);
+          }
+        } catch (error) {
+          console.error("Groq API error:", error);
         }
       }
 
-      const reach = calculateFollowerComponent(followers);
-      const activityScore = calculatePostComponent(tweetCount);
-      const { score: ageScore, days: ageDays } = calculateAgeComponent(joinedDate);
-      const impact = calculateEngagementComponent(engagementRate);
-      
-      let total = reach + activityScore + ageScore + impact;
-      if (verified) total += 5;
-      const finalScore = Math.min(100, Math.max(1, Math.round(total)));
-      const ratio = following > 0 ? followers / following : followers;
-
-      // Breakdown calculations
-      const authenticity = Math.min(25, 10 + (verified ? 10 : 0) + (bio ? 5 : 0));
-      const value = Math.min(25, 5 + quality * 2);
-      const influence = Math.min(25, (reach / 40) * 25);
-      const activity = Math.min(25, (activityScore / 15) * 10 + (ageScore / 15) * 15);
-
-      const response = {
-        username,
-        profile: { display_name: displayName, bio, location, avatar_url: `https://unavatar.io/x/${username}`, followers, following, tweet_count: tweetCount, joined: joinedDate, verified },
-        engagement: { average_likes: avgLikes, average_comments: avgReplies, engagement_rate: engagementRate },
-        card2_score: finalScore,
-        breakdown: { authenticity, value, influence, activity },
-        niches,
-        score_reasoning: reasoning,
-        from_cache: false,
-        scored_at: new Date().toISOString()
+      const responseData = {
+        username: username,
+        profile: {
+          display_name: displayName,
+          bio: bio,
+          location: location,
+          avatar_url: finalAvatarUrl,
+          followers: followers,
+          following: following,
+          tweet_count: tweetCount || numTweets,
+          joined: joined,
+          verified: verified
+        },
+        engagement: {
+          average_likes: avgLikes,
+          average_comments: avgReplies,
+          engagement_rate: engagementRate
+        },
+        score: {
+          total: scoreTotal,
+          breakdown: {
+            authenticity,
+            value,
+            influence,
+            activity
+          }
+        },
+        niches: niche
       };
 
-      profileCache.set(username.toLowerCase(), response);
-      return res.json(response);
-    } catch (e) {
-      return res.status(500).json({ error: true, message: "Anomaly detected" });
+      res.json(responseData);
+    } catch (topLevelError) {
+      console.error("[Top-level API Error]", topLevelError);
+      res.status(500).json({ error: "Internal Server Error" });
     }
   });
 
+  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
     app.use(vite.middlewares);
   } else {
-    const dist = path.join(process.cwd(), 'dist');
-    app.use(express.static(dist));
-    app.get('*', (req, res) => res.sendFile(path.join(dist, 'index.html')));
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
 
-  app.listen(PORT, "0.0.0.0", () => console.log(`Server on :${PORT}`));
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
 startServer();

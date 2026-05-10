@@ -1,45 +1,49 @@
 import { useState, useEffect, useRef, FormEvent, FC, MouseEvent } from "react";
-import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft, AlertCircle, Download, Share2, Twitter } from "lucide-react";
-import { motion, AnimatePresence, animate } from "motion/react";
-import { toPng } from 'html-to-image';
+import { Search, AtSign, Heart, MessageCircle, TrendingUp, TrendingDown, CheckCircle2, User, Hash, AlignLeft, AlertCircle } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { LOGO_BASE64 } from "./constants";
 import { analyzeTwitterUser, TwitterScoreResult } from "./services/twitterScore";
 
-const AnimatedNumber: FC<{ value: number; format?: (v: number) => string }> = ({ value, format = (v) => v.toFixed(2) }) => {
-  const nodeRef = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (nodeRef.current) {
-      const controls = animate(0, value, {
-        duration: 1.5,
-        ease: "easeOut",
-        onUpdate(v) {
-          if (nodeRef.current) nodeRef.current.textContent = format(v);
-        }
-      });
-      return controls.stop;
-    }
-  }, [value, format]);
-  return <span ref={nodeRef}>{format(0)}</span>;
-};
-
 // --- Types ---
 
-const formatNumber = (num: any) => {
-  if (typeof num !== 'number' || isNaN(num)) return "0";
+interface AnalysisData {
+  username: string;
+  profile: {
+    display_name: string;
+    bio: string;
+    location: string;
+    avatar_url: string;
+    followers: number;
+    following: number;
+    tweet_count: number;
+    joined: string;
+    verified: boolean;
+  };
+  engagement: {
+    average_likes: number;
+    average_comments: number;
+    engagement_rate: number;
+  };
+  score: {
+    total: number;
+    grade: string;
+    breakdown: {
+      authenticity: number;
+      value: number;
+      influence: number;
+      activity: number;
+    };
+    reasoning: string;
+  };
+  niches: string[];
+  scraped_at: string;
+  from_cache: boolean;
+}
+
+const formatNumber = (num: number) => {
   if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
   if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-  return Math.round(num).toString();
-};
-
-const getAuraGrade = (score: number) => {
-  if (score >= 95) return "S+";
-  if (score >= 90) return "S";
-  if (score >= 80) return "A+";
-  if (score >= 70) return "A";
-  if (score >= 60) return "B+";
-  if (score >= 50) return "B";
-  if (score >= 40) return "C";
-  return "D";
+  return num.toString();
 };
 
 // --- Components ---
@@ -79,7 +83,7 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width }}
-          transition={{ duration: 1.2, delay: 0.5 + index * 0.1, ease: "circOut" }}
+          transition={{ duration: 1, delay: 0.5 + index * 0.1 }}
           className="h-full bg-bg rounded-full group-hover:opacity-80 transition-opacity"
         />
       </div>
@@ -93,16 +97,12 @@ const Bar: FC<{ width: string; label: string; index: number }> = ({ width, label
   );
 };
 
-const SearchScreen: FC<{ 
-  onSearch: (username: string) => void; 
-  error: string | null;
-  isLoading: boolean;
-}> = ({ onSearch, error, isLoading }) => {
+const SearchScreen: FC<{ onSearch: (username: string) => void; error: string | null }> = ({ onSearch, error }) => {
   const [username, setUsername] = useState("");
 
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault();
-    if (username.trim() && !isLoading) {
+    if (username.trim()) {
       onSearch(username);
     }
   };
@@ -114,20 +114,6 @@ const SearchScreen: FC<{
       exit={{ opacity: 0 }}
       className="flex flex-col items-center justify-center w-[1000px] h-[560px] relative"
     >
-      {/* Brand Identity Header */}
-      <motion.div 
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="mb-12 flex flex-col items-center gap-2"
-      >
-        <div className="w-[100px] h-[100px] bg-red rounded-[28px] flex items-center justify-center overflow-hidden shadow-2xl shadow-red/20 mb-2">
-          <img src="/logo512.png" alt="Aura Logo" className="w-[90%] h-[90%] object-contain scale-110" />
-        </div>
-        <h1 className="text-off-white font-condensed text-6xl tracking-[0.25em] uppercase font-black">AuraScore</h1>
-        <p className="text-off-white/40 font-condensed text-xl tracking-[0.1em] uppercase">Intelligence Engine v1.0</p>
-      </motion.div>
-
       <form 
         onSubmit={handleSubmit}
         className="relative w-[672px] group"
@@ -139,21 +125,15 @@ const SearchScreen: FC<{
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder={isLoading ? "analyzing..." : "username..."}
-          disabled={isLoading}
-          className={`w-full bg-red h-16 rounded-full px-16 text-2xl font-condensed text-bg placeholder:text-bg/40 outline-none transition-all focus:ring-4 focus:ring-red/20 ${isLoading ? 'opacity-50 cursor-wait' : ''}`}
+          placeholder="username..."
+          className="w-full bg-red h-16 rounded-full px-16 text-2xl font-condensed text-bg placeholder:text-bg/40 outline-none transition-all focus:ring-4 focus:ring-red/20"
           autoFocus
         />
         <button 
           type="submit"
-          disabled={isLoading || !username.trim()}
-          className={`absolute right-6 top-1/2 -translate-y-1/2 text-bg hover:scale-110 transition-transform cursor-pointer ${isLoading ? 'opacity-50' : ''}`}
+          className="absolute right-6 top-1/2 -translate-y-1/2 text-bg hover:scale-110 transition-transform cursor-pointer"
         >
-          {isLoading ? (
-             <div className="w-8 h-8 border-4 border-bg/30 border-t-bg rounded-full animate-spin" />
-          ) : (
-            <Search size={32} strokeWidth={2.5} />
-          )}
+          <Search size={32} strokeWidth={2.5} />
         </button>
       </form>
       
@@ -161,7 +141,7 @@ const SearchScreen: FC<{
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-[65%] flex items-center gap-2 text-red font-condensed text-xl bg-bg/80 px-4 py-2 rounded-lg border border-red/30"
+          className="absolute top-[65%] flex items-center gap-2 text-red-500 font-condensed text-xl bg-bg/80 px-4 py-2 rounded-lg border border-red-500/30"
         >
           <AlertCircle size={20} />
           {error}
@@ -182,12 +162,11 @@ const LoadingScreen: FC = () => (
     exit={{ opacity: 0 }}
     className="flex flex-col items-center justify-center w-[1000px] h-[560px] relative"
   >
-    <div className="w-[120px] h-[120px] animate-spin-slow rounded-[32px] overflow-hidden flex items-center justify-center bg-red/10 border border-red/20 mb-8 relative">
-      <div className="absolute inset-0 bg-red/20 animate-pulse-fast rounded-full blur-3xl" />
+    <div className="w-[66px] h-[66px] animate-spin-pause rounded-lg overflow-hidden">
       <img 
-        src="/logo512.png" 
+        src={LOGO_BASE64} 
         alt="Loading..." 
-        className="w-[85%] h-[85%] object-contain relative z-10" 
+        className="w-full h-full object-cover" 
       />
     </div>
     <p className="absolute bottom-12 text-off-white/60 text-2xl font-condensed tracking-wider animate-dots">
@@ -203,11 +182,7 @@ const ResultScreen: FC<{
     comments: 'up' | 'down' | 'neutral';
     rate: 'up' | 'down' | 'neutral';
   } | null;
-  hueRotation: number;
-}> = ({ data, trends, hueRotation }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-
+}> = ({ data, trends }) => {
   if (!data) return null;
 
   const getTrendIcon = (type: 'up' | 'down' | 'neutral', size: number = 28) => {
@@ -220,81 +195,16 @@ const ResultScreen: FC<{
     return `${rate.toFixed(2)}%`;
   };
 
-  const generateImageFile = async (): Promise<{ dataUrl: string, file: File } | null> => {
-    if (!cardRef.current) return null;
-    const dataUrl = await toPng(cardRef.current, {
-      cacheBust: true,
-      backgroundColor: '#303332',
-      style: { filter: `hue-rotate(${hueRotation}deg)` },
-      filter: (node) => !node.classList?.contains('exclude-from-capture')
-    });
-    const blob = await (await fetch(dataUrl)).blob();
-    const file = new File([blob], `AuraScore-${data.username}.png`, { type: 'image/png' });
-    return { dataUrl, file };
-  };
-
-  const handleDownload = async () => {
-    if (isDownloading) return;
-    try {
-      setIsDownloading(true);
-      const img = await generateImageFile();
-      if (!img) return;
-      const link = document.createElement('a');
-      link.download = img.file.name;
-      link.href = img.dataUrl;
-      link.click();
-    } catch (err) {
-      console.error('Failed to generate image', err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handleShare = async () => {
-    if (isDownloading) return;
-    try {
-      setIsDownloading(true);
-      const img = await generateImageFile();
-      if (!img) return;
-      
-      const shareData = {
-        title: 'My AuraScore Profile',
-        text: `Check out my genuine AuraScore intelligence dashboard for @${data.username}! #AuraScore`,
-        files: [img.file]
-      };
-
-      if (navigator.canShare && navigator.canShare(shareData)) {
-        await navigator.share(shareData);
-      } else {
-        const link = document.createElement('a');
-        link.download = img.file.name;
-        link.href = img.dataUrl;
-        link.click();
-        alert("Native sharing is not supported on this browser. The image was saved locally to share manually!");
-      }
-    } catch (err) {
-      console.error('Failed to share image', err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handlePostToX = () => {
-    const text = encodeURIComponent(`Check out my genuine AuraScore intelligence dashboard for @${data.username}! Analysed by Gemini AI. #AuraScore #AI`);
-    const url = encodeURIComponent(window.location.href);
-    window.open(`https://x.com/intent/tweet?text=${text}&url=${url}`, '_blank');
-  };
-
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="relative w-[1000px] h-[560px] flex items-center justify-center mx-auto"
+      className="relative w-[1000px] h-screen flex items-center justify-center mx-auto"
     >
-      <div className="absolute inset-0" ref={cardRef}>
+      <div className="relative w-[1000px] h-[560px]">
         {/* Central Hub */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center justify-center">
-          <div className="relative w-[251px] h-[251px] rounded-full overflow-hidden shadow-[0_0_21px_10px_rgba(217,217,217,0.3)] bg-bg border-4 border-off-white/10">
+          <div className="relative w-[251px] h-[251px] rounded-full overflow-hidden shadow-[0_0_21px_10px_rgba(217,217,217,0.6)]">
             <img 
               src={data.profile.avatar_url || LOGO_BASE64} 
               alt="Profile" 
@@ -303,6 +213,7 @@ const ResultScreen: FC<{
             />
           </div>
           
+          {/* Connection Icons - Positioned precisely at intersections */}
           <div className="absolute top-[-125.5px] left-[17px] w-[66px] h-[66px] bg-off-white rounded-full flex items-center justify-center border-[2px] border-bg shadow-[0_4px_6.6px_3px_rgba(0,0,0,0.25)] scale-115">
             <User size={34} className="text-bg" strokeWidth={2.5} />
           </div>
@@ -318,87 +229,47 @@ const ResultScreen: FC<{
         </div>
 
         {/* Top Left - STATS */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1, duration: 0.5 }}
-          className="absolute top-0 left-0 w-[480px] h-[260px] overflow-hidden"
-        >
+        <div className="absolute top-0 left-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-x-[-1]"></div>
-          <div className="absolute inset-0 pl-14 pr-36 py-6 flex flex-col justify-center gap-2">
-            <div className="flex items-center gap-4">
-              <User size={28} className="text-bg shrink-0" />
-              <div className="flex items-baseline gap-1.5 ml-2">
-                <span className="text-4xl font-condensed text-bg leading-none">
-                  {formatNumber(data.profile.followers)}
-                </span>
-                <span className="text-lg font-condensed text-bg/60">followers</span>
+          <div className="absolute inset-0 pl-14 pr-36 py-10 flex flex-col justify-center gap-4">
+            <div className="flex items-center gap-6">
+              <Heart size={36} className="text-bg shrink-0" />
+              <div className="flex items-baseline gap-1.5 ml-4">
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_likes.toFixed(2)}</span>
+                <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
+              {getTrendIcon(trends?.likes || 'neutral')}
             </div>
-            
-            <div className="flex items-center gap-4">
-              <AlignLeft size={28} className="text-bg shrink-0" />
-              <div className="flex items-baseline gap-1.5 ml-2">
-                <span className="text-4xl font-condensed text-bg leading-none">
-                  {formatNumber(data.profile.tweet_count)}
-                </span>
-                <span className="text-lg font-condensed text-bg/60">posts</span>
+            <div className="flex items-center gap-6">
+              <MessageCircle size={36} className="text-bg shrink-0" />
+              <div className="flex items-baseline gap-1.5 ml-4">
+                <span className="text-5xl font-condensed text-bg leading-none">{data.engagement.average_comments.toFixed(2)}</span>
+                <span className="text-xl font-condensed text-bg/60">avg</span>
               </div>
+              {getTrendIcon(trends?.comments || 'neutral')}
             </div>
-
-            <div className="w-full h-px bg-bg/10 my-1" />
-
-            <div className="flex items-center gap-4">
-              <Heart size={28} className="text-bg shrink-0" />
-              <div className="flex items-baseline gap-1.5 ml-2">
-                <span className="text-4xl font-condensed text-bg leading-none">
-                  <AnimatedNumber value={data.engagement.average_likes} />
-                </span>
-                <span className="text-lg font-condensed text-bg/60">avg likes</span>
+            <div className="flex items-center gap-6">
+              <div className="w-9 h-9 border-[3px] border-bg rounded flex items-center justify-center shrink-0">
+                 <TrendingUp size={22} className="text-bg" strokeWidth={3} />
               </div>
-              {getTrendIcon(trends?.likes || 'neutral', 20)}
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="w-7 h-7 border-[2.5px] border-bg rounded flex items-center justify-center shrink-0">
-                 <TrendingUp size={16} className="text-bg" strokeWidth={3} />
+              <div className="flex items-baseline gap-1.5 ml-4">
+                <span className="text-5xl font-condensed text-bg leading-none">{formatRate(data.engagement.engagement_rate)}</span>
               </div>
-              <div className="flex items-baseline gap-1.5 ml-2">
-                <span className="text-4xl font-condensed text-bg leading-none">
-                  <AnimatedNumber value={data.engagement.engagement_rate} format={(v) => formatRate(v)} />
-                </span>
-              </div>
-              {getTrendIcon(trends?.rate || 'neutral', 20)}
+              {getTrendIcon(trends?.rate || 'neutral')}
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Top Right - SCORE */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden"
-        >
+        <div className="absolute top-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full"></div>
-          <div className="absolute inset-0 pl-42 pr-8 flex flex-col items-center justify-center -gap-2">
-            <span className="text-3xl font-condensed font-bold text-bg/40 tracking-widest uppercase mb-[-10px]">Aura Rank</span>
-            <div className="flex items-baseline gap-2">
-              <span className="inline-block text-[150px] font-condensed font-black text-bg leading-none tracking-tighter scale-y-110">
-                <AnimatedNumber value={data.card2_score} format={(v) => Math.round(v).toString()} />
-              </span>
-              <span className="text-6xl font-condensed font-black text-bg opacity-50 mb-4">{getAuraGrade(data.card2_score)}</span>
-            </div>
+          <div className="absolute inset-0 pl-42 pr-8 flex items-center justify-center">
+            <span className="inline-block text-[184px] font-condensed font-medium text-bg leading-none tracking-tighter scale-y-110">{data.card2_score}</span>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Bottom Left - BREAKDOWN */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-          className="absolute bottom-0 left-0 w-[480px] h-[260px] overflow-hidden"
-        >
+        {/* Bottom Left - TYPE */}
+        <div className="absolute bottom-0 left-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-x-[-1] scale-y-[-1]"></div>
           <div className="absolute inset-0 pl-8 pr-42 flex flex-col justify-center gap-6">
             {[
@@ -410,69 +281,29 @@ const ResultScreen: FC<{
               <Bar key={i} width={`${(bar.val / 25) * 100}%`} label={bar.label} index={i} />
             ))}
           </div>
-        </motion.div>
+        </div>
 
         {/* Bottom Right - NICHE */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-          className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden"
-        >
+        <div className="absolute bottom-0 right-0 w-[480px] h-[260px] overflow-hidden">
           <div className="card-shape w-full h-full scale-y-[-1]"></div>
-          <div className="absolute inset-0 pl-38 pr-6 py-8 flex flex-row flex-wrap content-center items-center justify-center gap-2">
+          <div className="absolute inset-0 pl-38 pr-4 py-10 flex flex-row flex-wrap content-center items-center justify-center gap-3">
             {data.niches.map((label, i) => (
-              <motion.div 
-                key={i} 
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.5 + i * 0.05 }}
-                className="bg-bg/90 text-red px-3 py-1 rounded-lg text-[18px] font-condensed font-bold leading-none tracking-tight shadow-sm border border-red/20 hover:border-red/40 transition-colors"
-                style={{ backdropFilter: 'blur(4px)' }}
-              >
-                #{label.replace(/^#/, '')}
-              </motion.div>
+              <div key={i} className="bg-bg text-off-white px-5 py-2 rounded-xl text-[26px] font-condensed font-bold leading-none tracking-tight hover:scale-105 transition-transform cursor-default shadow-sm border border-off-white/10">
+                {label}
+              </div>
             ))}
           </div>
-        </motion.div>
+        </div>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1 }}
-        className="exclude-from-capture absolute bottom-[-80px] left-1/2 -translate-x-1/2 flex items-center gap-4 z-[100]"
-        style={{ filter: `hue-rotate(${hueRotation}deg)` }}
-      >
-        <button
-          onClick={handleDownload}
-          className="flex items-center gap-3 bg-red text-bg px-8 py-3 rounded-full font-condensed text-2xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer"
-        >
-          <Download size={24} strokeWidth={3} />
-          {isDownloading ? 'Processing...' : 'Save File'}
-        </button>
-        <button
-          onClick={handleShare}
-          className="flex items-center gap-3 bg-off-white text-bg px-8 py-3 rounded-full font-condensed text-2xl font-bold shadow-lg shadow-off-white/20 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-        >
-          <Share2 size={24} strokeWidth={3} />
-          Share
-        </button>
-        <button
-          onClick={handlePostToX}
-          className="flex items-center gap-3 bg-[#1DA1F2] text-white px-8 py-3 rounded-full font-condensed text-2xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer"
-        >
-          <Twitter size={24} fill="currentColor" />
-          Post to X
-        </button>
-      </motion.div>
+      
     </motion.div>
   );
 };
 
+// --- Main App ---
+
 export default function App() {
   const [screen, setScreen] = useState<"search" | "loading" | "result">("search");
-  const [randomInitHash] = useState(() => Math.floor(Math.random() * 360));
   const [analysisData, setAnalysisData] = useState<TwitterScoreResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [trends, setTrends] = useState<{
@@ -496,19 +327,16 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    const handleInitialPath = async () => {
-      const path = window.location.pathname;
-      if (path.startsWith("/score/")) {
-        const userFromPath = path.replace("/score/", "").trim();
-        if (userFromPath && userFromPath.length > 0 && screen === "search") {
-          console.log("[Portal] Deep link detected:", userFromPath);
-          handleSearch(userFromPath);
-        }
-      }
-    };
-    handleInitialPath();
-  }, []);
+  const cleanUsername = (input: string) => {
+    let cleaned = input.trim();
+    // Remove URL prefix if present
+    cleaned = cleaned.replace(/^(https?:\/\/)?(www\.)?(x\.com|twitter\.com)\//, '');
+    // Remove @ if present
+    cleaned = cleaned.replace(/^@/, '');
+    // Remove trailing slashes or query params
+    cleaned = cleaned.split(/[/?#]/)[0];
+    return cleaned;
+  };
 
   const handleSearch = async (input: string) => {
     setError(null);
@@ -516,6 +344,8 @@ export default function App() {
 
     try {
       const result = await analyzeTwitterUser(input);
+      
+      // Calculate trends
       const prevDataStr = localStorage.getItem("previous_twitter_score");
       const prevData = prevDataStr ? JSON.parse(prevDataStr) : null;
 
@@ -529,6 +359,7 @@ export default function App() {
         setTrends({ likes: 'neutral', comments: 'neutral', rate: 'neutral' });
       }
 
+      // Save to localStorage for trend calculation
       localStorage.setItem("previous_twitter_score", JSON.stringify({
         username: result.username,
         average_likes: result.engagement.average_likes,
@@ -541,30 +372,22 @@ export default function App() {
     } catch (err: any) {
       console.error("Analysis error:", err);
       setScreen("search");
+      
       let message = "Something went wrong, please try again";
       if (err.message === "INVALID_USERNAME") message = "That doesn't look like a valid username";
-      if (err.message === "RATE_LIMITED") message = "Intelligence engines are cooling down. Please wait a minute.";
+      if (err.message === "RATE_LIMITED") message = "You're searching too fast — wait a minute";
+      if (err.message === "API_RATE_LIMITED") message = "RapidAPI rate limit reached. Check your plan on RapidAPI.";
       if (err.message === "USER_NOT_FOUND") message = "Account not found, private, or suspended";
+      if (err.message === "FETCH_FAILED") message = "Could not reach Twitter right now, try again soon";
+      if (err.message === "API_FORBIDDEN") message = "API Key invalid or not subscribed to Twitter135 on RapidAPI";
+      if (err.message === "CORS_ERROR") message = "Browser blocked the request. This API might not support client-side calls.";
+      
       setError(message);
     }
   };
 
-  const hueRotation = (() => {
-    if (screen === "result" && analysisData?.username) {
-      let hash = 0;
-      for (let i = 0; i < analysisData.username.length; i++) {
-          hash = analysisData.username.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      return Math.abs(hash % 360);
-    }
-    return randomInitHash;
-  })();
-
   return (
-    <div 
-      className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20 overflow-hidden transition-all duration-[1500ms] ease-in-out"
-      style={{ filter: `hue-rotate(${hueRotation}deg)` }}
-    >
+    <div className="min-h-screen bg-bg flex items-center justify-center selection:bg-white/20 overflow-hidden">
       <div 
         style={{ 
           transform: `scale(${scale})`,
@@ -583,14 +406,13 @@ export default function App() {
               key="search" 
               onSearch={handleSearch} 
               error={error}
-              isLoading={screen === "loading"}
             />
           )}
           {screen === "loading" && (
             <LoadingScreen key="loading" />
           )}
           {screen === "result" && (
-            <ResultScreen key="result" data={analysisData} trends={trends} hueRotation={hueRotation} />
+            <ResultScreen key="result" data={analysisData} trends={trends} />
           )}
         </AnimatePresence>
       </div>

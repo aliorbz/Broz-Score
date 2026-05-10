@@ -70,7 +70,7 @@ export async function analyzeTwitterUser(
   }
 
   try {
-    const response = await fetch(`/api/analyze?username=${username}`);
+    const response = await fetch(`/api/score/${username}`);
     
     if (!response.ok) {
       if (response.status === 400) throw new Error("INVALID_USERNAME");
